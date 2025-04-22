@@ -168,7 +168,7 @@ v045_all <- bind_rows(v045_cnt_3, v045_st_1, v045_us_1) %>%
 v045_all
 ```
 
-# spuression
+# suppression
 
 applying suppression criteria for fewer than 4 cases, but keeping 0 cases
 
