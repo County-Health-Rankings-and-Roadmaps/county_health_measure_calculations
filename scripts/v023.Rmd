@@ -56,18 +56,11 @@ data_dir_2025 <- 'C:/01_CHRR/data/r2025'
 - The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
 ```{r }
 fips <-  bind_rows(
-  read_sas(file.path(data_dir_2025, "county_fips.sas7bdat") ),
+  read_sas(file.path(data_dir_2025, "county_fips_with_ct_old.sas7bdat") ),
   read_sas(file.path(data_dir_2025, "state_fips.sas7bdat")))  %>% 
   arrange(statecode, countycode) %>% 
   glimpse()
 
-county_fips_old <- read_sas(file.path(data_dir_2025, "county_fips_old.sas7bdat") ) %>% 
-  filter(statecode == "09") %>% 
-  glimpse()
-
-fips_all <- bind_rows(fips, county_fips_old) %>% 
-  arrange(statecode, countycode) %>%
-  glimpse()
 ```
 
 # import raw data
@@ -144,7 +137,7 @@ bls_v023_final
 
 ```{r}
 # standardize fips: add 15005, use CT new counties
-bls_v023_final_1 <- fips_all %>% 
+bls_v023_final_1 <- fips %>% 
   select(statecode, countycode) %>% 
   left_join(bls_v023_final, by = c("statecode", "countycode"))
 
