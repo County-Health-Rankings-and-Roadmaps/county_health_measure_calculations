@@ -1,13 +1,59 @@
 ---
-title: "reading and math calcs"
+title: "v159 reading scores and v160 math scores - R2025"
+author: "HOW"
 format: html
 editor: visual
 ---
 
-```{r wrangle  }
-state = read.csv("P:/CH-Ranking/Data/2025/1 Raw Data/SEDA/seda_state_long_cs_5.0.csv") %>% filter(grade == 3 & year == 2019)
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 
-county =  read.csv("P:/CH-Ranking/Data/2025/1 Raw Data/SEDA/seda_county_long_cs_5.0.csv") %>% filter(grade == 3 & year == 2019)
+```
+
+## Basic information
+
+-   Description: Average grade level performance for 3rd graders on English Language Arts standardized tests.
+
+-   What is the denominator? The total number of students that took the test in each county
+
+Data access
+
+-   Website to downloaded data
+
+<https://edopportunity.org/>
+
+-   Download the files "seda_county_long_CS_5.0 and seda_state_long_CS_5.0."
+
+    County level data is downloaded from the SEDA county tables. Add the grade level (3) to the variable.
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(haven)
+library(here)
+```
+
+# standard county and state fips
+
+-   The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+
+```{r }
+fips <-  bind_rows(
+  haven::read_sas(here("inputs/county_fips_with_ct_old.sas7bdat")),
+  haven::read_sas(here("inputs/state_fips.sas7bdat")))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# import raw data
+
+```{r wrangle  }
+state = read.csv(here("raw_data/SEDA/seda_state_long_cs_5.0.csv")) %>% filter(grade == 3 & year == 2019)
+
+county =  read.csv(here("raw_data/SEDA/seda_county_long_cs_5.0.csv")) %>% filter(grade == 3 & year == 2019)
 
 sc = bind_rows(state, county)
 
@@ -17,25 +63,19 @@ sc$statecode <- str_pad(sc$fips, width = 2, pad = "0")
 sc$fipscode <- str_pad(sc$sedacounty, width = 5, pad = "0")
 sc$countycode = substr(sc$fipscode, 3,5)
 
+# add 3 to all values since this is the grade number
 sctot = sc %>% 
   mutate(rawvalue = cs_mn_all + 3,
          race_white = cs_mn_wht + 3,
          race_black = cs_mn_blk + 3, 
          race_asian = cs_mn_asn + 3,
-         race_aian = cs_mn_nam + 3, # NEED TO CHECK THIS!!!! 
+         race_aian = cs_mn_nam + 3, 
          race_hispanic = cs_mn_hsp + 3) %>% 
   select(statecode, countycode, rawvalue, race_white, race_black, race_asian, race_aian, race_hispanic, subject)
 
 sctot$countycode[is.na(sctot$countycode)] = "000"
 
 
-
-#note : pulling in old and new ct fips so i can decide later 
-cfips = haven::read_sas("P:/CH-Ranking/Data/2025/2 Cleaned data ready for Calculation or Verification/county_fips_with_CT_old.sas7bdat")
-
-sfips = haven::read_sas("P:/CH-Ranking/Data/2025/2 Cleaned data ready for Calculation or Verification/state_fips.sas7bdat")
-
-fips = rbind(sfips, cfips)
 
 
 math = sctot %>% filter(subject == "mth")
@@ -45,19 +85,13 @@ read = sctot %>% filter(subject == "rla")
 mathfips = merge(fips, math, by = c("statecode", "countycode"), all.x = TRUE)
 readfips = merge(fips, read, by = c("statecode", "countycode"), all.x = TRUE)
 
-
-# so i can remember how these are supposed to be formatted..... 
-oldother = haven::read_sas("P:/CH-Ranking/Data/2024/6 Measure Datasets/Additional Measures/v160_otherdata.sas7bdat")
-oldtot =  haven::read_sas("P:/CH-Ranking/Data/2024/6 Measure Datasets/Additional Measures/v160.sas7bdat")
-
-
 ```
 
 columns of importance are : cs_mn_xxx
 
 -   all - all students
 
--   nam - native american students NEED TO CHECK!!!!
+-   nam - native american students
 
 -   asn – Asian or Pacific Islander
 
@@ -66,6 +100,10 @@ columns of importance are : cs_mn_xxx
 -   hsp – Hispanic
 
 -   wht – White (not Hispanic)
+
+
+
+## Reading Scores 
 
 ```{r v159 reading only}
 
@@ -130,15 +168,14 @@ v159_otherdata[v159_otherdata$countycode == "000" & v159_otherdata$statecode == 
 print(v159_otherdata[v159_otherdata$countycode == "000" & v159_otherdata$statecode == "00", ])
 
 #save to project 
-readr::write_csv(v159_otherdata, file = "~/chrr_measure_calcs/duplicated_data/v159_subgroup_how.csv")
+readr::write_csv(v159_otherdata, file = here("measure_datasets/v159_subgroup_r2025.csv"))
 
-readr::write_csv(v159, file = "~/chrr_measure_calcs/duplicated_data/v159_how.csv")
+readr::write_csv(v159, file = here("measure_datasets/v159_r2025.csv"))
 
-#save to p drive 
-haven::write_sas(v159_otherdata, "P:/CH-Ranking/Data/2025/3 Data calculated needs checking/v159_otherdata.sas7bdat")
 
-haven::write_sas(v159, "P:/CH-Ranking/Data/2025/3 Data calculated needs checking/v159.sas7bdat")
 ```
+
+## Math Scores
 
 ```{r v160 math only}
 
@@ -206,19 +243,8 @@ v160_otherdata[v160_otherdata$countycode == "000" & v160_otherdata$statecode == 
 print(v160_otherdata[v160_otherdata$countycode == "000" & v160_otherdata$statecode == "00", ])
 
 #save to project 
-readr::write_csv(v160_otherdata, file = "~/chrr_measure_calcs/duplicated_data/v160_subgroup_how.csv")
+readr::write_csv(v160_otherdata, file = here("measure_datasets/v160_subgroup_r2025.csv"))
 
-readr::write_csv(v160, file = "~/chrr_measure_calcs/duplicated_data/v160_how.csv")
+readr::write_csv(v160, file = here("measure_datasets/v160_r2025.csv"))
 
-
-
-# have to convert to sas manually by loading the csvs into sas and then writring from sas..... the attempts below do not work 
-#save to p drive 
-haven::write_sas(v160_otherdata, "P:/CH-Ranking/Data/2025/3 Data calculated needs checking/v160_otherdata.sas7bdat")
-
-haven::write_sas(v160, "P:/CH-Ranking/Data/2025/3 Data calculated needs checking/v160.sas7bdat")
-
-
-
-foreign::write.foreign(v159_how, datafile = "P:/CH-Ranking/Data/2025/3 Data calculated needs checking/v159.sas7bdat", codefile = "P:/CH-Ranking/Data/2025/3 Data calculated needs checking/v159.sas7bdat", package = "SAS")
 ```
