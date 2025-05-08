@@ -53,7 +53,8 @@ fips <-  bind_rows(
 ```{r wrangle  }
 state = read.csv(here("raw_data/SEDA/seda_state_long_cs_5.0.csv")) %>% filter(grade == 3 & year == 2019)
 
-county =  read.csv(here("raw_data/SEDA/seda_county_long_cs_5.0.csv")) %>% filter(grade == 3 & year == 2019)
+# the raw county-level data exceeds github's file size limit (100mb) so users must download it from the link above and save it as raw_data/SEDA/seda_county_long_cs_5.0.csv in their local copy of this repo  
+#county =  read.csv(here("raw_data/SEDA/seda_county_long_cs_5.0.csv")) %>% filter(grade == 3 & year == 2019)
 
 sc = bind_rows(state, county)
 
