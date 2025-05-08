@@ -2,5 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
-raw_data/nchs/
-raw_data/SEDA/seda_county_long_cs_5.0.csv
+inputs/nchs/
+inputs/SEDA/seda_county_long_cs_5.0.csv
