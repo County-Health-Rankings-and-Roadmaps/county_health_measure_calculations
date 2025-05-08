@@ -2,7 +2,7 @@
 author: MB; 
 
 /* Description: Percentage of people under age 18 in poverty. 
-Numerator: The numerator is the number of people under age 18 living in a household whose income is below the poverty level. Poverty status is defined by family; either everyone in the family is in poverty or no one in the family is in poverty. The characteristics of the family used to determine the poverty threshold are: number of people, number of related children under 18, and whether or not the primary householder is over age 65. Family income is then compared to the poverty threshold; if that family’s income is below that threshold, the family is in poverty.
+Numerator: The numerator is the number of people under age 18 living in a household whose income is below the poverty level. Poverty status is defined by family; either everyone in the family is in poverty or no one in the family is in poverty. The characteristics of the family used to determine the poverty threshold are: number of people, number of related children under 18, and whether or not the primary householder is over age 65. Family income is then compared to the poverty threshold; if that familyâ€™s income is below that threshold, the family is in poverty.
 Denominator: The total number of people under age 18 in a country. */ 
 
 /* Website to download data: https://www.census.gov/data/datasets/2023/demo/saipe/2023-state-and-county.html 
@@ -15,15 +15,15 @@ v024_cilow =  v024_rawvalue - cidistance_pov;
 v024_cihigh =  v024_rawvalue + cidistance_pov*/
 
 
-*change mypath to be the root of your local repository ; 
-%let mypath = C:\Users\holsonwillia\Downloads;
+*set mypath to be the root of your local repository ; 
+%let mypath = ;
 %let outpath = &mypath.\measure_datasets; 
 libname measure_datasets "&outpath"; 
 
 
 PROC IMPORT
 OUT= v024
-datafile= "&mypath.\inputs\SAIPE\est23all.xls"
+datafile= "&mypath.\inputs\v024_raw.xls"
 out = work.v024
 DBMS= xls REPLACE;
 getnames=yes;
