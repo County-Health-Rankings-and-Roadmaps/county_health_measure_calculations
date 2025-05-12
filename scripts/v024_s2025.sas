@@ -18,7 +18,7 @@ v024_cihigh =  v024_rawvalue + cidistance_pov*/
 *set mypath to be the root of your local repository ; 
 %let mypath = ;
 %let outpath = &mypath.\measure_datasets; 
-libname measure_datasets "&outpath"; 
+libname out "&outpath."; 
 
 
 PROC IMPORT
@@ -47,6 +47,6 @@ if v024_cihigh > 1 then v024_cihigh = 1;
 run;
 
 
-data mylib.v024_s2025;
+data out.v024_s2025;
 set v024_1;
 run; 
