@@ -13,7 +13,7 @@ use only old CT counties, no data avalaible for new
 *set mypath to be the root of your local repository ; 
 %let mypath = ;
 %let outpath = &mypath.\measure_datasets; 
-libname measure_datasets "&outpath"; 
+libname measure_datasets "&outpath."; 
 
 
 PROC IMPORT
@@ -119,6 +119,6 @@ run;
 
 
 
-data measure_datasets.v023_s2025;
+data out.v023_s2025;
 set Full_5;
 run; 
