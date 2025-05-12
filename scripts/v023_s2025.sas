@@ -18,8 +18,8 @@ libname measure_datasets "&outpath";
 
 PROC IMPORT
 OUT= v023
-datafile= "&mypath.\inputs\v023_raw.xls"
-out = work.v024
+datafile= "&mypath.\raw_data\BLS\laucnty24.xlsx"
+out = work.v023
 DBMS= xls REPLACE;
 getnames=yes;
 datarow = 7;
@@ -119,6 +119,6 @@ run;
 
 
 
-data mylib.v023_s2025;
+data measure_datasets.v023_s2025;
 set Full_5;
 run; 
