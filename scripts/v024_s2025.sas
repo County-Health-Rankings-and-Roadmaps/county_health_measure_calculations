@@ -23,7 +23,7 @@ libname measure_datasets "&outpath";
 
 PROC IMPORT
 OUT= v024
-datafile= "&mypath.\inputs\v024_raw.xls"
+datafile= "&mypath.\raw_data\SAIPE\estall.xls"
 out = work.v024
 DBMS= xls REPLACE;
 getnames=yes;
