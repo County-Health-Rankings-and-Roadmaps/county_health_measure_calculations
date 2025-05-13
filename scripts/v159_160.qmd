@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Basic information
 
--   Description: Average grade level performance for 3rd graders on English Language Arts standardized tests.
+-   **Description:** Average grade level performance for 3rd graders on English Language Arts standardized tests.
 
 -   What is the denominator? The total number of students that took the test in each county
 
@@ -101,9 +101,7 @@ columns of importance are : cs_mn_xxx
 
 -   wht – White (not Hispanic)
 
-
-
-## Reading Scores 
+## Reading Scores
 
 ```{r v159 reading only}
 
