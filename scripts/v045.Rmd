@@ -17,10 +17,11 @@ knitr::opts_chunk$set(echo = TRUE)
 The numerator is the number of reported chlamydia cases in a county.
 
 - What is the numerator?
-The total number of people in the civilian labor force, age 16 and older, that are unemployed but seeking work.
+Number of reported cases of chlamydia
 
 - What is the denominator?
-The denominator is the total county population.
+Total population
+
 
 ## Raw data access
 
