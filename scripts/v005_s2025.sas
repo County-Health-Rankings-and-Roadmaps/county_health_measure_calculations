@@ -36,7 +36,7 @@ libname out "&outpath.";
 
 PROC IMPORT
 OUT= v005_county
-datafile= "&mypath.\raw_data\PQI_90_county.csv"
+datafile= "&mypath.\raw_data\MMDT\PQI_90_county.csv"
 DBMS= csv REPLACE;
 getnames=yes;
 run;
@@ -56,7 +56,7 @@ run;
 
 PROC IMPORT
 OUT= v005_state
-datafile= "&mypath.\raw_data\PQI_90_state.csv"
+datafile= "&mypath.\raw_data\MMDT\PQI_90_state.csv"
 DBMS= csv REPLACE;
 getnames=yes;
 run;
