@@ -74,7 +74,7 @@ https://data.cms.gov/tools/mapping-medicare-disparities-by-population */
 Data National;
 statecode="00";
 countycode="000";
-v005_rawvalue = 2681 ; /*Remeber to update with National Value from Tool*/
+v005_rawvalue = 2681 ; /*Remember to update with National Value from Tool*/
 run;
 
 /*Merge*/
