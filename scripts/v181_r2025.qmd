@@ -1,0 +1,232 @@
+---
+title: "v181 - Library Access"
+author: "how"
+format: html
+editor: visual
+---
+
+## Description: 
+Library visits per person living within the library service area per year.
+
+## Data Source: 
+Institute of Museum and Library Services
+
+Data Download Link: 
+https://www.imls.gov/research-evaluation/surveys/public-libraries-survey-pls
+
+FY2022 data was used for 2025 Rankings
+
+
+## Measure Calculation: 
+
+### National
+
+National values are calculated like state values. The sum of library visits across the country and the national population are calculated, then the two numbers are divided.
+
+
+### State-level
+The state value is calculated by summing the library visits and the population from that state, then dividing the two sums.
+
+
+### County-level 
+
+Since a library's service area may cross multiple counties, we calculate the median number of visits for all libraries with service areas in the county and use this as the county value.
+
+1. Bring in and clean library data files
+
+Library data is provided in an outlet file (pls_fy22_outlet_pud22i) and an AE file (PLS_FY22_AE_pud22i).
+
+The following code is provided by the data source:
+
+Outlet file:
+
+array num _numeric_;
+do over num; * * if num = -1 then num = .M; /*recode missing value into .M*/
+if num = -3 and STATSTRU ='23' then num = .C; /*recode Temporary Closed Library into .C*/
+if num = -4 then num = .N; /*recode "Not Applicable" into .N*/
+end; array char _character_;
+do over char; if char ='M' then char = ' '; /*recode missing value into M for character variables*/
+end; /*recode the rest of special missing into corresponding missing values*/
+
+Apply the following criteria to clean the files:
+
+Outlet file:
+
+if STATSTRU in ('23') then delete; ***if they were temporarily closed during this year**;
+if phone in ('-3') then delete;
+if hours =-3 then delete;
+if wks_open < 2 then delete; **if they were open less than 2 weeks**;
+
+IF STATSTRU = '10' THEN DELETE; *this denotes an incorrect record in the data set;
+
+if C_FSCS = "N" then delete; ***not a public library***;
+if C_OUT_TY = "BM" then delete; ***if the outlet was a book by mail only***;
+if STABR = "AS" or STABR = "GU" or STABR = "MP" or STABR = "PR" or STABR = "VI" then delete; **american samoa, guam, mariana islands, PR, virgin islands***;
+
+AE file:
+
+if STARTDAT = '-3' then STARTDAT = ' ';
+if ENDDATE = '-3' then ENDDATE = ' ';
+IF C_LEGBAS = 'SD' THEN DELETE; *delete school district libraries that wouldn’t be for the general public;
+
+if C_FSCS = "N" then delete; **not a public library**;
+if STABR = "AS" or STABR = "GU" or STABR = "MP" or STABR = "PR" or STABR = "VI" then delete; **american samoa, guam, mariana islands, PR, virgin islands***;
+if STATSTRU in ('-23') then delete; ***if they were temporarily closed during this year**;
+if visits IN (-3, -1, 0) then delete;
+if phone in ('-3') then delete;
+if HRS_open =-3 then delete;
+
+NOTE: take a substring of CENTRACT to get state (SUBSTR(CENTRACT,1,2); and county (SUBSTR(CENTRACT,3,3) fips, but ensure you label the resulting variables to differentiate between the fips originating from the outlet file vs. the AE file to avoid overwriting during merge.
+
+2. Calculate visits per population from AE file
+
+visits_per_pop=visits/popu_und
+
+3. Merge the Outlet and AE file by FSCSKEY 
+
+Delete any rows where variable hours is missing--if hours =. then delete; 
+
+4. Perform PROC UNIVARIATE (or similar) to calculate the median value of visits_per_pop and CIs
+
+proc univariate DATA=[have] cipctldf alpha=0.05 noprint; 
+var [variable name for visits/population];
+by statecode_outlet countycode_outlet; *use the fips from the outlet file;
+OUTPUT OUT=visit_median_ci pctlpts=50 pctlpre=p
+cipctldf=(lowerpre=LCL upperpre=UCL);
+run;
+
+Any rows where cilow=cihigh should have their cilow and cihigh set to missing
+
+5. Merge with county dataset so any missing counties can be included
+
+6. Calculate state values from AE file
+
+7. Calculate national values from AE file
+
+8. Calculate state and national CIs 
+
+Similar to how we generally calculate CIs.
+
+9. Merge and clean up final dataset to follow CHRR formatting of measure datasets
+
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+library(here)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r}
+fips <-  bind_rows(
+  read_sas(here("inputs/county_fips_with_ct_old.sas7bdat")) ,
+  read_sas(here("inputs/state_fips.sas7bdat")))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+# import raw data
+
+```{r}
+aeraw = read.csv("raw_data/IMLS/PLS_FY22_AE_pud22i.csv")
+outletraw = read.csv("raw_data/IMLS/pls_fy22_outlet_pud22i.csv")
+
+```
+
+# clean and calculate state and national values 
+
+```{r}
+
+aeclean = aeraw %>% 
+  #filter(!is.na(HOURS)) %>% 
+  filter(!(STATSTRU %in% c(23))) %>% #c(10, 23))) %>% 
+  filter(!(PHONE %in% c(-3))) %>% #, -4))) %>% 
+  #filter(HOURS != -3) %>% 
+  #filter(STARTDAT != -3) %>% #start and end date shoudl be chekced - unclear that they need to be deleted..... 
+  #filter(ENDDATE != -3) %>% 
+  filter(C_LEGBAS != "SD") %>% 
+  filter(HRS_OPEN != -3) %>% 
+  #filter(WKS_OPEN >= 2) %>% 
+  filter(C_FSCS != "N") %>% 
+  #filter(C_OUT_TY != "BM") %>% 
+  filter(!(STABR %in% c("AS", "GU", "MP", "PR", "VI"))) %>% 
+  filter(!(VISITS %in% c(-3, -1, 0))) %>% 
+  mutate(totcode = str_pad(CENTRACT, width = 11, pad = "0", side = "left"),
+    statecode = substr(totcode, 1, 2), 
+         countycode = substr(totcode, 3,5),
+    visits_per_pop = VISITS/POPU_UND)
+
+
+
+
+statevals = aeclean %>% group_by(statecode) %>% 
+  summarize(numerator = sum(VISITS, na.rm = TRUE),
+            denominator = sum(POPU_UND, na.rm = TRUE), 
+            med_visit = numerator/denominator) %>% 
+  mutate(countycode = "000")
+
+ntlval = aeclean %>%
+  summarize(numerator = sum(VISITS, na.rm = TRUE),
+            denominator = sum(POPU_UND, na.rm = TRUE), 
+            med_visit = numerator/denominator) %>% 
+  mutate(statecode = "00", 
+         countycode = "000")
+
+```
+
+
+# now clean the outlet file and merge 
+
+```{r}
+
+outletclean = outletraw %>% 
+  filter(!is.na(HOURS)) %>% 
+  filter(!(STATSTRU %in% c(10, 23))) %>% 
+  filter(!(PHONE %in% c(-3))) %>%  # , -4))) %>% 
+  filter(HOURS != -3) %>% 
+  filter(WKS_OPEN >= 2) %>% 
+  filter(C_FSCS != "N") %>% 
+  filter(C_OUT_TY != "BM") %>% 
+  filter(!(STABR %in% c("AS", "GU", "MP", "PR", "VI"))) %>% 
+  mutate(totcode = str_pad(CENTRACT, width = 11, pad = "0", side = "left"),
+         statecode = substr(totcode, 1, 2), 
+         countycode = substr(totcode, 3,5),
+         onelib = 1) %>% 
+  group_by(FSCSKEY) %>%
+  mutate(nlibrary = n()) %>%
+  ungroup()
+
+outletae = merge(outletclean, aeclean, by = "FSCSKEY", all.x = TRUE)
+```
+
+# calculate medians and merge with fipscodes 
+
+```{r}
+meds = outletae %>% group_by(statecode.x, countycode.x) %>%
+  rename(statecode = statecode.x, countycode = countycode.x) %>% 
+  summarize(med_visit = median(visits_per_pop, na.rm = TRUE))
+
+
+cfips = fips %>% filter(countycode != "000")
+
+oa_cfips = merge(cfips, meds, by = c("statecode", "countycode"), all.x = TRUE) %>% filter(countycode != "000")
+
+
+oatot = bind_rows(oa_cfips, statevals, ntlval)
+```
+
+# rename some columns and save measure data 
+
+```{r}
+libsfinal = oatot %>% rename(v181_rawvalue = med_visit,
+                             v181_numerator = numerator, 
+                             v181_denominator = denominator)
+write.csv(libsfinal, file = here("measure_datasets/v181_r2025.csv"))
+
+```
+
