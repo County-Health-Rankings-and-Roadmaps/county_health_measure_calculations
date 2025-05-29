@@ -13,22 +13,108 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## v003 Uninsured Adults 
 
+### Basic information
+
+- Description
+Percentage of adults under age 65 without health insurance.
+
+- What is the numerator?
+The numerator is the number of people ages 18 to 64 who currently have no health insurance coverage. A person is uninsured if they are not currently covered by insurance through a current/former employer or union, purchased from an insurance company, Medicare, Medicaid, Medical Assistance, any kind of government-assistance plan for those with low incomes or disability, TRICARE or other military health care, Indian Health Services, VA, or any other health insurance or health coverage plan.
+
+- What is the denominator?
+The denominator is the county population ages 18 to 64.
+
+## Raw data access
+
+**#Website to downloaded data**
+https://www.census.gov/data/datasets/time-series/demo/sahie/estimates-acs.html
+
+**Online documentation** 
+https://www.census.gov/programs-surveys/sahie/technical-documentation/methodology.html
+
+**Directions**
+Use https://www2.census.gov/programs-surveys/sahie/technical-documentation/file-layouts/sahie-file-layout-2008-2022.pdf to select the appropriate categories for:
+
+- `agecat` (i.e., age category): = 1 (18 to 64 years)
+- `racecat` (race category): = 0 (All races)
+- `sexcat` (sex category): = 0 (Both sexes)
+- `iprcat` (i.e., income category): =  0  (All income levels)
+
+The measure is already calculated. But a 95% confidence interval is constructed by converting the 90% margin of error to 95%.
+
+Confidence limits = (v003_numerator/v003_denominator) +/- ((1.96*v003_moe)/164.5)
+
+v003_moe = pctui_moe
 
 ## v085 Uninsured
 
+### Basic information
+
+- Description
+Percentage of population under age 65 without health insurance.
+
+- What is the numerator?
+The numerator is the number of people currently uninsured in the county under the age of 65.
+
+- What is the denominator?
+The denominator is the number of people in the county under age 65.
+
+### Raw data access
+
+**Website to downloaded data**
+https://www.census.gov/data/datasets/time-series/demo/sahie/estimates-acs.html
+
+**Online documentation** 
+https://www.census.gov/programs-surveys/sahie/technical-documentation/methodology.html
+
+**Directions**
+Use https://www2.census.gov/programs-surveys/sahie/technical-documentation/file-layouts/sahie-file-layout-2008-2022.pdf to select the appropriate categories for:
+
+- `agecat` (i.e., age category): = 0 (Under 65 years)
+- `racecat` (race category): = 0 (All races)
+- `sexcat` (sex category): = 0 (Both sexes)
+- `iprcat` (i.e., income category): =  0  (All income levels)
+
+The measure is already calculated. But a 95% confidence interval is constructed by converting the 90% margin of error to 95%.
+
+Confidence limits = (v085_numerator/v085_denominator) +/- ((1.96*v085_moe)/164.5)
+
+v085_moe = pctui_moe
 
 ## v122 Uninsured Children
 
-## data source
+### Basic information
 
-2008 - 2022 Small Area Health Insurance Estimates (`SAHIE`) using the American Community Survey (ACS)
+- Description
+Percentage of children under age 19 without health insurance.
 
-Website to downloaded data 
+- What is the numerator?
+The numerator is the number of people under age 19 who currently have no health insurance coverage. A person is uninsured if they are not currently covered by insurance through a current/former employer or union, purchased from an insurance company, Medicare, Medicaid, Medical Assistance, any kind of government-assistance plan for those with low incomes or disability, TRICARE or other military health care, Indian Health Services, VA, or any other health insurance or health coverage plan.
+
+- What is the denominator?
+The denominator is the county population under age 19.
+
+## Raw data access
+
+**Website to downloaded data**
 https://www.census.gov/data/datasets/time-series/demo/sahie/estimates-acs.html
 
+**Online documentation** 
+https://www.census.gov/programs-surveys/sahie/technical-documentation/methodology.html
 
-Online documentation 
-https://www.census.gov/programs-surveys/sahie/technical-documentation/model-input-data.html
+**Directions**
+Use https://www2.census.gov/programs-surveys/sahie/technical-documentation/file-layouts/sahie-file-layout-2008-2022.pdf to select the appropriate categories for:
+
+- `agecat` (i.e., age category): = 4 (Under 19 years)
+- `racecat` (race category): = 0 (All races)
+- `sexcat` (sex category): = 0 (Both sexes)
+- `iprcat` (i.e., income category): = 0 (All income levels)
+
+The measure is already calculated. But a 95% confidence interval is constructed by converting the 90% margin of error to 95%.
+
+Confidence limits = (v122_numerator/v122_denominator) +/- ((1.96*v122_moe)/164.5)
+
+v122_moe = pctui_moe
 
 # import packages
 
@@ -146,7 +232,7 @@ add_flag_CT <- function(df, vnum, old="U", new = "A"){
 
 ```{r}
 # data
-sahie_raw <- read_csv("raw_data/SAHIE/sahie-2022-csv.zip",
+sahie_raw <- read_csv("../raw_data/SAHIE/sahie-2022-csv.zip",
                        skip = 83) %>% 
   janitor::clean_names() %>% 
   glimpse()
@@ -158,12 +244,6 @@ sahie_1 <- sahie_raw %>%
   mutate(across(c(nipr, nipr_moe, nui, nui_moe, pctui_moe), ~ as.numeric(.))) %>% 
   glimpse()
 ```
-
-```{r}
-paste0(sahie_raw %>% names(), collapse = "," )
-
-```
-
 
 ## variables
 
@@ -195,25 +275,8 @@ tibble::tribble(
     "nui_moe",  "MOE  for NUI",   NA, NA,
       "PCTUI", "Percent uninsured in demographic group for <income category>",  NA,   NA,
   "pctui_moe", "MOE  for PCTUI",  NA, NA
-  ) %>% 
-  print_kbl()
+  ) 
 
-```
-
-# load helper function for v003, 085, 122
-
-get_sahie_measures(df_sahie, df_fips,age_cat, vnum)
-
--   `df_sahie`: df of sahie data set
--   `df_fips`: df with standard state and county fips.
--   `age_cat`: age category
--   `vnum`: measure number
-
-
-        
-```{r}
-# load source file
-source("../04_functions/v003_085_122_helpers.R")
 ```
 
 # v003
@@ -227,83 +290,70 @@ source("../04_functions/v003_085_122_helpers.R")
 `nipr`: denominator; `NIPR`: Number in demographic group for <income category>
 `pctui_moe`: margin of error; `PCTUI`: Percent uninsured in demographic group for <income category>
 
-## use function
+## process data
 
 ```{r}
-v003_gl <- get_sahie_measures_2024(
+v003 <- get_sahie_measures(
   df_sahie = sahie_1, 
   df_fips = fips,
   age_cat = 1, # age: 18 to 64 years
-  vnum = "v003",
-  std_fips = FALSE) %>% 
+  vnum = "v003") %>% 
+  add_flag_CT(vnum = "v003", old="U", new = "A") %>% 
   glimpse()
-
-v003_gl %>% head()
 ```
+
+## save data
 
 ```{r}
-v003_gl %>% 
-  filter(statecode == "09")
-```
-
-
-## export data
-
-```{r eval=FALSE}
-write_csv(v003_gl,
-          paste0(data_out_path, "/",
-                 "v003", "_r2025",
-                 # "_", format(Sys.Date(), "%Y_%m_%d"),
+write_csv(v003,
+          paste0("../measure_datasets/", "v003", "_r2025",
                  ".csv"),
           na = "")
 ```
 
 # v085
-## use function
+
+## process data
 
 ```{r}
-v085_gl <- get_sahie_measures_2024(
+v085 <- get_sahie_measures(
   df_sahie = sahie_1, 
   df_fips = fips,
   age_cat = 0, # age: under 65
-  vnum = "v085",
-  std_fips = FALSE) %>% 
+  vnum = "v085") %>% 
+  add_flag_CT(vnum = "v085", old="U", new = "A") %>% 
   glimpse()
 
-v085_gl %>% head()
 ```
 
-## export data
+## save data
 
-```{r eval=FALSE}
-write_csv(v085_gl,
-          paste0(data_out_path, "/",
-                 "v085", "_r2025",
-                 # "_", format(Sys.Date(), "%Y_%m_%d"),
+```{r}
+write_csv(v085,
+          paste0("../measure_datasets/", "v085", "_r2025",
                  ".csv"),
           na = "")
 ```
 
 # v122
 
-## use function
+## process data
 
 ```{r}
-v122_gl <- get_sahie_measures_2024(df_sahie = sahie_1, 
-                              df_fips = fips,
-                              age_cat = 4, # age: under 19
-                              vnum = "v122",
-                              std_fips = FALSE) %>% 
+v122 <- get_sahie_measures(
+  df_sahie = sahie_1, 
+  df_fips = fips,
+  age_cat = 4, # age: under 19
+  vnum = "v122") %>% 
+  add_flag_CT(vnum = "v122", old="U", new = "A") %>% 
   glimpse()
 ```
 
-## export data
+## save data
 
-```{r eval=FALSE}
-write_csv(v122_gl,
-          paste0(data_out_path, "/",
-                 "v122", "_r2025",
-                 # "_", format(Sys.Date(), "%Y_%m_%d"),
+```{r}
+write_csv(v122,
+          paste0("../measure_datasets/", "v122", "_r2025",
                  ".csv"),
           na = "")
 ```
