@@ -10,13 +10,13 @@
 /*Data sources:
 
 -	State (StateIndicatorsDatabase_2025.xlsx) and district-level (DistrictCostDatabase_2025.xlsx) data are available and can be downloaded from this link: https://www.schoolfinancedata.org/download-data/
-    For the Data Release 2025, SFID was late in publicly releasing the data; we received the raw data via email.
+    For the Data Release 2025, SFID was late in publicly releasing the data; we received the raw data via email, however the data are now publicly accessible at the link above.
 
--	NCES school data, leauniverse2021_2022.sas7bdat, can be downloaded from here: P:\CH-Ranking\Data\2025\2 Cleaned data ready for Calculation or Verification'
+-	NCES school data, leauniverse2021_2022.sas7bdat, is available in the inputs folder: chrr_measure_calcs/inputs/leasuniverse2021_2022.sas7bdat 
 
--	STATE FIPS data, state_fips.sas7bdat, can be downloaded from here: P:\CH-Ranking\Data\2025\2 Cleaned data ready for Calculation or Verification'
+-	STATE FIPS data, state_fips.sas7bdat, is available in the inputs folder: chrr_measure_calcs/inputs/state_fips.sas7bdat
 
--	COUNTY FIPS WITH CONNECTICUT OLD, sfa.county_fips_with_ct_old.sas7bdat, can be downloaded from here: P:\CH-Ranking\Data\2025\2 Cleaned data ready for Calculation or Verification'*/
+-	COUNTY FIPS WITH CONNECTICUT OLD, county_fips_with_ct_old.sas7bdat, is available in the inputs folder: chrr_measure_calcs/inputs/county_fips_with_ct_old.sas7bdat 
 
 /*Note: Counties 53013 and 36071 were suppressed due to significant changes from the previous year identified during verification.*/
 
@@ -25,62 +25,74 @@
 
 /*DISTRICT-LEVEL DATASET*/
 
-/*Copy the district-level (DistrictCostDatabase_2025) data sheet (in xlsx) to an excel sheet and save as ‘v169_raw_district.xlsx’
-
+/*
 1.	Clean the dataset by only including the following columns:
-    •	leaid (District ID)
-    •	year
-    •	predcost
-    •	ppcstot (note: the requested data sent via email has a column called ‘spend’. We need to rename the column to ‘ppcstot’. 
+    ?	leaid (District ID)
+    ?	year
+    ?	predcost
+    ?	ppcstot (note: the requested data sent via email has a column called ?spend?. We need to rename the column to ?ppcstot?. 
 
 2.	Subset the data with year=2022 (note: the requested data sent via email only has 2022 data)
 
 3.	Calculate the funding gap for each district: fundinggap=ppcstotpredcost 
 
-4.	Import the cleaned v169_raw_district.xlsx to sas and save as ‘v169_raw_district.sas7bdat’*/
+4.	Import the cleaned v169_raw_district.xlsx to sas and save as ?v169_raw_district.sas7bdat?*/
 
 
 /*STATE-LEVEL DATASET*/
-
-/*Copy the state-level (StateIndicatorsDatabase_2025) data sheet (in xlsx) to an excel sheet and save as ’ v169_raw_state.xlsx’
-
+/*
 1. Clean the dataset by only including the following columns:
 
-   •	stabbr (State abbreviation)
-   •	state_name (State name)
-   •	necm_predcost_state 
-   •	necm_ppcstot_state
-   •	necm_fundinggap_state
+   ?	stabbr (State abbreviation)
+   ?	state_name (State name)
+   ?	necm_predcost_state 
+   ?	necm_ppcstot_state
+   ?	necm_fundinggap_state
 
 2. Subset the data with year=2022
 
-3. Import the cleaned v169_raw_state.xlsx to sas and save as ‘v169_raw_state.sas7bdat’*/
+3. Import the cleaned v169_raw_state.xlsx to sas and save as ?v169_raw_state.sas7bdat?*/
 
 
-/*START THE CALCULATION*/
+/*Some set up */
 
+*set mypath to be the root of your local repository ; 
+%let mypath = C:\Users\holsonwillia\Documents\chrr_measure_calcs;
+%let outpath = &mypath.\measure_datasets; 
+libname out "&outpath."; 
+libname inputs "&mypath.\inputs"; 
 
-/*create a library called sfa*/
-
-libname sfa 'H:\Github_CHRR\v169\Sent to Github\inputs\raw inputs';
+*check macro variable values to ensure data paths look correct; 
+%put &mypath; 
+%put &outpath; 
 
 /*calculate the district-level data*/
 
-/*Import v169_raw_district.sas7bdat*/
+/*Import district level data from SFID folder */
 
-/*use v169_raw_district.sas7bdat for calculation*/
+/*use the "data" sheet of the xlsx file*/
 
-data one; set sfa.v169_raw_district;
+proc import 
+out = one
+datafile = "&mypath.\raw_data\SFID\DistrictCostDatabase_2025.xlsx"
+dbms = xlsx;
+getnames = yes;
+sheet = "Data"; 
+run; 
+
+
 proc sort; by leaid;
+where year = 2022; 
 run;
 /* 12666 observations*/
+*11952 observations; 
 
 
 /*using the leauniverse data (leauniverse2021_2022.sas7bdat) to add statecode*/
 
-/*Import leauniverse2021_2022.sas7bdat */
+/*Import leauniverse2021_2022.sas7bdat from inputs folder */
 
-data two; set sfa.lea2021_2022;
+data two; set inputs.leauniverse2021_2022;
 proc sort; by agency_id_nces_assigned_district;
 run;
 /*19409 observations*/
@@ -94,8 +106,15 @@ proc sort; by leaid;
 run;
 
 
+data three_fixed;
+    set three;
+    leaid_char = put(leaid, z7.); /* to match format in one */
+    drop leaid;
+    rename leaid_char = leaid;
+run;
+
 data four;
-merge one (in=in1) three;
+merge one (in=in1) three_fixed;
 by leaid;
 if in1;
 run;
@@ -111,6 +130,7 @@ data six; set five;
 proc sort; by fipscode;
 run;
 /*12666 observations*/
+*11952 observations; 
 
 /*remove fipscode 36071 and 53013*/
 
@@ -118,7 +138,8 @@ data six_a; set six;
 if fipscode = '36071' then delete;
 if fipscode = '53013' then delete;
 run;
-/*12647 observations—19 observations removed*/
+/*12647 observations?19 observations removed*/
+*11935 obs - 17 obs removed; 
 
 /*Aggregate district-level data to county level*/
 /*Group by county*/
@@ -132,6 +153,7 @@ from six_a
 group by fipscode;
 quit;
 /*3053 observations*/
+*3035 observation; 
 
 /*calculate v169_rawvalue and v169_other_data_1*/
 
@@ -142,29 +164,36 @@ run;
 /*3053 observations*/
 
 
-/*calculate the state data*/
 
-/*Import the v169_raw_state.sas7bdat*/
+/*calculate the state-level data*/
 
-/*use v169_raw_state.sas7bdat for calculation*/
+/*Import state level data from SFID folder */
 
-data nine; set sfa.v169_raw_state;
-run;
+/*use the "data" sheet of the xlsx file*/
+
+proc import 
+out = nine
+datafile = "&mypath.\raw_data\SFID\StateIndicatorsDatabase_2025.xlsx"
+dbms = xlsx;
+getnames = yes;
+sheet = "Data"; 
+run; 
+
 
 data ten; set nine;
 rename necm_ppcstot_state = v169_other_data_1;
 label necm_ppcstot_state = 'v169_other_data_1';
 rename necm_fundinggap_state = v169_rawvalue;
 label necm_fundinggap_state = 'v169_rawvalue';
+where year = 2022; 
 run;
 /*51 observ*/
 
 
-/*use state_fips.sas7bdat data to get statecode, countycode, and fipscode*/
+/*use state_fips.sas7bdat from inputs folder to get statecode, countycode, and fipscode*/
 
-/*Import state_fips.sas7bdat*/
 
-data eleven; set sfa.state_fips;
+data eleven; set inputs.state_fips;
 run;
 
 data twelve; set eleven;
@@ -195,6 +224,7 @@ run;
 proc means mean median data = fourteen; var fundinggap;
 run;
 
+*this med value does not match mine..... hmmmmm; 
 data fifteen; set thirteen;
 if stabbr = 'US' then v169_rawvalue = 1411.08;
 run;
@@ -211,6 +241,7 @@ data sixteen; merge fifteen eight;
 by fipscode;
 run;
 /*3105 observ*/
+*3035 obs; 
 
 /*clean the complete data*/
 
@@ -225,14 +256,14 @@ statecode = substr (fipscode, 1, 2);
 countycode = substr (fipscode, 3, 3);
 run;
  /*3105 observations*/
-
+*3087; 
 
 /*Add the following standard columns, all set to missing:
-•	v169_numerator
-•	v169_denominator
-•	v169_cilow
-•	v169_cihigh
-•	v169_sourceflag*/
+?	v169_numerator
+?	v169_denominator
+?	v169_cilow
+?	v169_cihigh
+?	v169_sourceflag*/
 
 data nineteen; set eighteen;
 v169_numerator = .;
@@ -241,9 +272,6 @@ v169_cilow = .;
 v169_cihigh = .;
 v169_sourceflag = .;
 run;
-
-libname sfa 'H:\Github_CHRR\v169\Sent to Github\inputs\raw inputs';
-
 
 /*standardize dataset with master FIPS codes*/
 
@@ -254,8 +282,8 @@ Ensure the dataset contains exactly 3,204 rows*/
 
 
 data twenty; 
-set	sfa.county_fips_with_CT_old
-	sfa.state_fips; 
+set	inputs.county_fips_with_CT_old
+	inputs.state_fips; 
 keep statecode countycode fipscode;
 proc sort; by statecode countycode;
 run;
@@ -284,11 +312,11 @@ run;
 
 /*export as v169_s2025.sas7bdat*/
 
-libname export 'H:\Github_CHRR\v169\Sent to Github\measure_datasets';
-data export.v169_s2025; set twentytwo; run;
+data out.v169_s2025; set twentytwo; run;
 
 /*export as v169_s2025.xlsx*/
 proc export data=work.twentytwo
-    outfile="H:\Github_CHRR\v169\Sent to Github\measure_datasets\v169_s2025.xlsx"
-    dbms=xlsx;
+    outfile="&outpath.\v169_s2025.xlsx"
+    dbms=xlsx
+	replace; 
 run;
