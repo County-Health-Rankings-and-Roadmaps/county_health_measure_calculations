@@ -10,7 +10,8 @@
 /*Data sources:
 
 -	State (StateIndicatorsDatabase_2025.xlsx) and district-level (DistrictCostDatabase_2025.xlsx) data are available and can be downloaded from this link: https://www.schoolfinancedata.org/download-data/
-    For the Data Release 2025, SFID was late in publicly releasing the data; we received the raw data via email, however the data are now publicly accessible at the link above.
+    For the Data Release 2025, SFID was late in publicly releasing the data; we received the raw data via email, however the data are now publicly accessible at the link above. 
+	Note some discrepancies were found between the data we received via email and the data available from schoolfinanacedata.com as of March 2025. 
 
 -	NCES school data, leauniverse2021_2022.sas7bdat, is available in the inputs folder: chrr_measure_calcs/inputs/leasuniverse2021_2022.sas7bdat 
 
@@ -74,10 +75,10 @@ libname inputs "&mypath.\inputs";
 
 proc import 
 out = one
-datafile = "&mypath.\raw_data\SFID\DistrictCostDatabase_2025.xlsx"
+datafile = "&mypath.\raw_data\SFID\SFIDestimates_request.xlsx"
 dbms = xlsx;
 getnames = yes;
-sheet = "Data"; 
+sheet = "District"; 
 run; 
 
 
@@ -85,7 +86,6 @@ proc sort; by leaid;
 where year = 2022; 
 run;
 /* 12666 observations*/
-*11952 observations; 
 
 
 /*using the leauniverse data (leauniverse2021_2022.sas7bdat) to add statecode*/
@@ -106,15 +106,8 @@ proc sort; by leaid;
 run;
 
 
-data three_fixed;
-    set three;
-    leaid_char = put(leaid, z7.); /* to match format in one */
-    drop leaid;
-    rename leaid_char = leaid;
-run;
-
 data four;
-merge one (in=in1) three_fixed;
+merge one (in=in1) three;
 by leaid;
 if in1;
 run;
@@ -130,16 +123,16 @@ data six; set five;
 proc sort; by fipscode;
 run;
 /*12666 observations*/
-*11952 observations; 
 
 /*remove fipscode 36071 and 53013*/
 
 data six_a; set six;
 if fipscode = '36071' then delete;
 if fipscode = '53013' then delete;
+ppcstot_num = input(ppcstot, best12.);
+fundinggap_num = input(fundinggap, best12.);
 run;
 /*12647 observations?19 observations removed*/
-*11935 obs - 17 obs removed; 
 
 /*Aggregate district-level data to county level*/
 /*Group by county*/
@@ -173,10 +166,10 @@ run;
 
 proc import 
 out = nine
-datafile = "&mypath.\raw_data\SFID\StateIndicatorsDatabase_2025.xlsx"
+datafile = "&mypath.\raw_data\SFID\SFIDestimates_request.xlsx"
 dbms = xlsx;
 getnames = yes;
-sheet = "Data"; 
+sheet = "State"; 
 run; 
 
 
@@ -185,7 +178,6 @@ rename necm_ppcstot_state = v169_other_data_1;
 label necm_ppcstot_state = 'v169_other_data_1';
 rename necm_fundinggap_state = v169_rawvalue;
 label necm_fundinggap_state = 'v169_rawvalue';
-where year = 2022; 
 run;
 /*51 observ*/
 
@@ -216,6 +208,8 @@ run;
 /*continue using the raw district data (data one) by including the suppressed values*/
 
 data fourteen; set one;
+fundinggap = spend - predcost; run; 
+
 proc sort; by fundinggap;
 run;
 
@@ -224,7 +218,6 @@ run;
 proc means mean median data = fourteen; var fundinggap;
 run;
 
-*this med value does not match mine..... hmmmmm; 
 data fifteen; set thirteen;
 if stabbr = 'US' then v169_rawvalue = 1411.08;
 run;
@@ -241,7 +234,6 @@ data sixteen; merge fifteen eight;
 by fipscode;
 run;
 /*3105 observ*/
-*3035 obs; 
 
 /*clean the complete data*/
 
@@ -256,7 +248,6 @@ statecode = substr (fipscode, 1, 2);
 countycode = substr (fipscode, 3, 3);
 run;
  /*3105 observations*/
-*3087; 
 
 /*Add the following standard columns, all set to missing:
 ?	v169_numerator
