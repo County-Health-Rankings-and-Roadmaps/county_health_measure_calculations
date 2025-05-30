@@ -1,0 +1,149 @@
+---
+title: "v134: Alcohol Impaired Driving Deaths"
+author: "how"
+format: html
+editor: visual
+---
+
+# Description:
+
+Percentage of driving deaths with alcohol involvement.
+
+# Data Source:
+
+Fatality Analysis Reporting System
+
+# Data Download Link:
+
+https://www.nhtsa.gov/file-downloads?p=nhtsa/downloads/FARS/
+
+Click on "2022", then click "National", and then choose a file format (SAS or CSV) and click on "FARS2022NationalSAS.zip" or "FARS2022NationalCSV.zip".
+
+The files with the data needed are: "accident.sas7bdat" and "person.sas7bdat".
+
+# Numerator: 
+The numerator is the total number of alcohol-impaired motor vehicle crash deaths in the 5-year period. The National Highway Traffic Safety Administration classifies a fatal crash as alcohol-related or alcohol-involved if either a driver or a non-motorist (usually a pedestrian or bicyclist) had a measured or estimated blood alcohol concentration of 0.01 grams per deciliter or above.
+
+# Denominator: 
+The denominator is the total number of motor vehicle crash deaths in the 5-year period.
+
+# Error margins: 
+The Poisson distribution was used to calculate a 95% confidence interval, by taking the upper and lower limits of the numerator and denominator, such that:
+
+95% lower limit = numeratorlower limit/denominatorlower limit
+
+95% upper limit = numeratorupper limit/denominatorupper limit
+
+See the following for more information:
+
+http://influentialpoints.com/Training/confidence_intervals_of_proportions-principles-properties-assumptions.htm
+
+http://onbiostatistics.blogspot.com/2014/03/computing-confidence-interval-for.html
+
+http://ms.mcmaster.ca/peter/s743/poissonalpha.html
+
+# How do we calculate this measure? 
+
+Due to changes since 2021 FARS data, we need to process 2018-2020 data and 2021-2022 data differently.
+
+### Step 1: process 2018-2020 data
+
+Use previosly downloaded data on the P drive
+Only need the "accident" table for each year
+Numerator: Use column "drunk_dr" to get the number of fatalities in accidents in which alcohol was involved
+if drunk_dr>0 then alcohol_impaired_driving_death = fatals;
+
+else alcohol_impaired_driving_death = 0;
+
+Denominator: from column "fatals"
+
+### Step 2: process 2021  and 2022 data
+
+"drunk_dr" was discontinued in "accident" table
+Need both "accident" and "person" table
+Per FARS documentation, use the following logic to identify accidents in which drunk drivers were involved:
+"Driver Drinking is derived as drivers that have (1) police-reported alcohol involvement, or  (2) a positive alcohol test result. That is, if it is a vehicle where “Person Type” equals 1 (Driver of a Motor Vehicle In-Transport), and “PoliceReported Alcohol Involvement” equals 1 (Yes, Alcohol Involved) or “Alcohol Test Result” is greater than 0 and less than 95 (prior to 2015)/995 (2015 and later), then 1 (Drinking), otherwise 0 (No Drinking)."
+
+Using above logic, create a table (e.g., called "drunk_cases") to identify unique cases (st_case) involving drunk drivers
+Use "st_case" as the key to join "accident" table and "drunk_cases" table so that each case can be classified as either drunk driver(s) involveld or not
+Numerator: for drunk driver(s) involved cases, alcohol_impaired_driving_death = fatals; otherwise, alcohol_impaired_driving_death = 0.
+Denominator: from column "fatals"
+### Step 3: combine all 5-year data
+
+Aggregate data to county-, state-, and nation-level
+Calculate rawvalue: Add up the total number of fatalities in accidents in which alcohol was involved (drunk_dr > 0) and divide by the total number of fatalities 
+
+### Step 4: Confidence intervals
+
+see details above 
+
+### Step 5: Use standard FIPS codes
+
+make sure the dataset has county FIPS codes consistent with our master county FIPS dataset
+
+### Step 6: Suppression
+
+if v134_cilow < 0 then v134_cilow = 0;
+if v134_cihigh > 1 then v134_cihigh = 1;
+if v134_rawvalue = . then v134_cilow = .;
+if v134_rawvalue = 1 then v134_cilow = .;
+if v134_rawvalue = 1 then v134_cihigh = .;
+
+#### Note: we are currently re-evaluating the supression criteria for this measure. 
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(haven)
+library(stringr)
+library(here)
+```
+
+# standard county and state fips
+
+-   The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+
+```{r}
+fips <-  bind_rows(
+  read_sas(here("inputs/county_fips_with_ct_old.sas7bdat")) ,
+  read_sas(here("inputs/state_fips.sas7bdat")))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+# load raw data
+```{r}
+# first load and process the 2018 - 2020 datasets (handle 2021 and 2022 differently)
+acc18 = haven::read_sas(here("raw_data/NHTSA/FARS2018/accident.sas7bdat"))
+acc19 = haven::read_sas(here("raw_data/NHTSA/FARS2019/accident.sas7bdat"))
+acc20 = haven::read_sas(here("raw_data/NHTSA/FARS2020/accident.sas7bdat"))
+
+
+comb_acc <- bind_rows(acc18, acc19, acc20)
+comb_acc = comb_acc %>% mutate(
+  alcohol_impaired_driving_death = ifelse(drunk_dr >0, 
+                                          FATALS, 
+                                          0),
+  v134_denominator = FATALS
+)
+
+
+
+
+acc21 = haven::read_sas("P:/CH-Ranking/Data/2025/1 Raw Data/NHTSA/FARS2021/accident.sas7bdat")
+acc22 = haven::read_sas("P:/CH-Ranking/Data/2025/1 Raw Data/NHTSA/FARS2022/accident.sas7bdat")
+per21 = haven::read_sas("P:/CH-Ranking/Data/2025/1 Raw Data/NHTSA/FARS2021/person.sas7bdat")
+per22 = haven::read_sas("P:/CH-Ranking/Data/2025/1 Raw Data/NHTSA/FARS2022/person.sas7bdat")
+
+comb_acc2 = bind_rows(acc21, acc22)
+comb_per = bind_rows(per21, per22)
+drunk_cases = comb_per %>% mutate(
+  st_case = ifelse(PER_TYPE == 1 & police_report == 1 | alcoholtest >0 & alcoholtest<95,
+                   1, 0)
+  
+)
+
+```
+
