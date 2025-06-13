@@ -7,6 +7,6 @@ You will find:
  - A few SAS scripts for specific measures only
  - Complete datasets for the 2025 release
 
-If you prefer the code in a different format, if there's a particular measure you need that isn't yet included, or if you have questions about the data, please feel free to reach out via the [Discussions tab](https://github.com/County-Health-Rankings-and-Roadmaps/chrr_measure_calcs/discussions).
+If you prefer data or calculations in a different format, if there's a particular measure you need that isn't yet included, or if you have questions, please feel free to reach out via the [Discussions tab](https://github.com/County-Health-Rankings-and-Roadmaps/chrr_measure_calcs/discussions).
 
 We can also be reached via email at **info@countyhealthrankings.org**
