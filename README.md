@@ -6,6 +6,6 @@ It includes:
  - R code in .qmd and .Rmd files.
  - A few SAS scripts for specific measures.
 
-If you prefer the code in a different format, if there's a particular measure you need that isn't yet included, or if you have questions about the data, please feel free to reach out via the Discussions tab.
+If you prefer the code in a different format, if there's a particular measure you need that isn't yet included, or if you have questions about the data, please feel free to reach out via the [Discussions tab]([url](https://github.com/County-Health-Rankings-and-Roadmaps/chrr_measure_calcs/discussions)).
 
-We can also be reached via email at info@countyhealthrankings.org
+We can also be reached via email at **info@countyhealthrankings.org**
