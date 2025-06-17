@@ -4,10 +4,10 @@ This repository is a work in progress. It contains code and data to replicate so
 
 ## Repository Structure
 
-* **`complete_datasets/`** – Finalized datasets prepared for the 2025 release, ready for analysis or public distribution.
-* **`dictionaries_and_documentation/`** – Codebooks, data dictionaries, methodology notes, and other documentation to support data understanding and use.
-* **`inputs/`** – Standardized reference data used across multiple measures (e.g., crosswalks, FIPS codes).
-* **`measure_datasets/`** – Intermediate datasets that contain calculations for specific health measures.
+* **`complete_datasets/`** – Finalized datasets prepared for the 2025 release, formatted for our website. 
+* **`dictionaries_and_documentation/`** – Data dictionaries, technical notes, and other documentation to support data understanding and use.
+* **`inputs/`** – Standardized reference files used across multiple measures (e.g., crosswalks, FIPS codes).
+* **`measure_datasets/`** – Intermediate datasets that contain calculated data for specific health measures.
 * **`raw_data/`** – Original, unprocessed data files as obtained from source systems or data providers. *Note: For some select measures, no data are included in this folder because the raw data are not publicly available.*
 * **`scripts/`** – R code in `.qmd` and `.Rmd` files for most measures and SAS scripts for specific measures only. These files contain code for data cleaning, calculation, and formatting.
 
