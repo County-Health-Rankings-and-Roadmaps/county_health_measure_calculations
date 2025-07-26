@@ -48,7 +48,7 @@ list_census_pop_csv <- function(zipped = TRUE) {
 # get Census pop estimates csv file name ----------------------------------
 
 get_census_csv_file_info <- function(year){
-  csv_lst <- list_census_pop_csv()
+  csv_lst <- list_census_pop_csv(zip = FALSE)
 
   f_name <- csv_lst[csv_lst$year == year, ]$file_name
   yr_num <- csv_lst[csv_lst$year == year, ]$year_num
@@ -77,11 +77,11 @@ read_census_pop <- function(file_name, dir = census_pop_dir){
   
 }
 
-# function to fix CT(09) old counties for 2022 by using data from 2021
-# since no pop data for CT old counties for 2022
+# function to fix CT(09) old counties for 2022 and 2023 by using data from 2021
+# since no pop data for CT old counties for 2022 or 2023 
 # CT counties only
-fix_CT_pop <- function(df_2022, df_2021){
-  df_fixed <- df_2022 %>%
+fix_CT_pop <- function(df_replace, df_2021){
+  df_fixed <- df_replace %>%
     # remove new CT counties
     filter(!(statecode == "09" & countycode != "000")) %>%
     # use previous year's data for Connecticut
@@ -1708,7 +1708,7 @@ update_mort_us_from_state_sub61 <- function(df_mort_all){
 # function: save calculated data as a csv file
 save_data <- function(df, vnum, output_dir = "../measure_datasets/") {
   # Construct the filename. Use paste0 for efficiency.
-  filename <- glue("{output_dir}{vnum}_r2025.csv")
+  filename <- glue("{output_dir}{vnum}_r2026.csv")
   
   # Write the CSV file with error handling.  Use tryCatch for robust error management.
   tryCatch({
@@ -1721,5 +1721,85 @@ save_data <- function(df, vnum, output_dir = "../measure_datasets/") {
 
 
 # end -------------------- ----------------------------------------------------
+
+
+
+# Functions for comparing initial calculations to duplications  
+
+#' Compare Duplicated and Initial Measure Calculations (no subgroups) 
+#'
+#' This function compares a duplicated version of a measure dataset 
+#' to the initial version calculated and stored for a given year. It reads 
+#' the initial SAS dataset from the Pdrive, merges it with the provided duplicated data 
+#' (by state and county FIPS), and computes the absolute differences for 
+#' key measure components: numerator, denominator, raw value, and confidence intervals.
+#' It also reports the number of missing values in both datasets.
+#' This function is for measures that have ci values but do not have race/other values 
+#'
+#' @param measure_num A character string indicating the measure (e.g., "v001")
+#' @param duplicated_data A data frame containing the duplicated calculations
+#' @param year An integer or string indicating the year of the data (e.g., 2026)
+#'
+#' @return A data frame of rows with differences greater than 0.001 in any component
+#' @examples
+#' compare("v001", v001, 2026)
+
+compare <- function(measure_num, duplicated_data, year) {
+  library(dplyr)
+  library(haven)
+  
+  # Read initial calculation 
+  initial <- read_sas(paste0("P:/CH-Ranking/Data/", year, "/3 Data calculated needs checking/", measure_num, ".sas7bdat"))
+  
+  # rename duplicated data 
+  dup = duplicated_data
+  
+  
+  # Merge main measure
+  initial_dup <- merge(initial, dup, by = c("statecode", "countycode"))
+  
+  # Get all components (numerator, denominator, rawvalue, cilow, cihigh)
+  components <- c("numerator", "denominator", "rawvalue", "cilow", "cihigh")
+  
+  # Initialize list for NA counts
+  na_report <- list()
+  
+  # Loop over components to calculate absolute differences
+  for (comp in components) {
+    col_x <- paste0(measure_num, "_", comp, ".x")
+    col_y <- paste0(measure_num, "_", comp, ".y")
+    diff_col <- paste0("diff_", comp)
+    
+    if (col_x %in% names(initial_dup) && col_y %in% names(initial_dup)) {
+      initial_dup[[diff_col]] <- abs(initial_dup[[col_x]] - initial_dup[[col_y]])
+      
+      na_report[[comp]] <- c(
+        initial_NA = sum(is.na(initial_dup[[col_x]])),
+        duplicated_NA = sum(is.na(initial_dup[[col_y]]))
+      )
+      
+    } else {
+      warning(paste("Missing expected columns:", col_x, "or", col_y))
+    }
+  }
+  
+  # Print summary
+  cat("Summary of Differences:\n")
+  print(sapply(initial_dup %>% select(starts_with("diff_")), summary))
+  
+  # Print summary of missing values
+  cat("\nMissing Value Report:\n")
+  na_df <- do.call(rbind, na_report) %>% as.data.frame()
+  print(na_df)
+  
+  # Filter rows with any meaningful differences
+  temp <- initial_dup %>% filter(if_any(starts_with("diff_"), ~ abs(.) > 0.001))
+  
+  cat(paste("\n", nrow(temp), "rows with significant mismatches found.\n"))
+  
+  return(temp)
+  
+}
+
 
 
