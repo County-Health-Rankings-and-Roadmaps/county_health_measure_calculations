@@ -1075,7 +1075,7 @@ get_race_data <- function(df, race_cat = 1, race_group = "white", version = "v00
       rename(flag2 = flag2_cb) %>%
       rename_with(.fn = ~ paste0(version, "_race_", race_group, "_", .x), 
                   .cols = c("cilow", "cihigh", "flag2"))
-  } else if (version %in% c("v127", "v161", "v015", "v039", "v138", "v148", "v135") ) {
+  } else if (version %in% c("v127", "v161", "v015", "v039", "v138", "v148", "v135", "v128") ) {
     df <- df %>%
       rename_with(.fn = ~ paste0(version, "_race_", race_group, "_", .x), 
                   .cols = c("denominator", "numerator", "cilow", "cihigh"))
@@ -1084,7 +1084,7 @@ get_race_data <- function(df, race_cat = 1, race_group = "white", version = "v00
       rename_with(.fn = ~ paste0(version, "_race_", race_group, "_", .x), 
                   .cols = c("cilow", "cihigh"))
   } else {
-    stop("Invalid version. Must be 'v001', 'v127', 'v147', 'v161', 'v015', 'v039', 'v138', 'v148', 'v135'.")
+    stop("Invalid version. Must be 'v001', 'v127', 'v128', v147', 'v161', 'v015', 'v039', 'v138', 'v148', 'v135'.")
   }
   
   return(df)
