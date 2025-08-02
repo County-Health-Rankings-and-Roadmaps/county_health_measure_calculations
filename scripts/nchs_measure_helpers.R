@@ -1801,5 +1801,89 @@ compare <- function(measure_num, duplicated_data, year) {
   
 }
 
+###################################################################################
+#' Compare Duplicated and Initial Measure Calculations (with race subgroups)
+#'
+#' This function compares a duplicated version of a measure dataset 
+#' to the initial version calculated and stored for a given year. It reads 
+#' the initial SAS dataset from the P drive, merges it with the provided duplicated data 
+#' (by state and county FIPS), and computes the absolute differences for 
+#' key measure components: numerator, denominator, raw value, and confidence intervals.
+#' 
+#' In addition to the main components, this function also compares values for 
+#' race subgroups where present. Race subgroup columns are expected to follow the 
+#' naming convention: <measure_num>_race_<group>, <measure_num>_race_<group>_cilow, 
+#' and <measure_num>_race_<group>_cihigh, where <group> includes 
+#' "white", "black", "aian", "asian", "nhopi", and "tom".
+#' 
+#' It also reports the number of missing values in both datasets for each component.
+#'
+#' @param measure_num A character string indicating the measure (e.g., "v001")
+#' @param duplicated_data A data frame containing the duplicated calculations
+#' @param year An integer or string indicating the year of the data (e.g., 2026)
+#'
+#' @return A data frame of rows with differences greater than 0.001 in any component
+#' @examples
+#' compare_subgroup("v001", v001, 2026)
 
-
+compare_subgroup <- function(measure_num, duplicated_data, year) {
+  library(dplyr)
+  library(haven)
+  
+  # Read initial calculation 
+  initial <- read_sas(paste0("P:/CH-Ranking/Data/", year, "/3 Data calculated needs checking/", measure_num, "_otherdata.sas7bdat"))
+  
+  # Rename duplicated data
+  dup <- duplicated_data
+  
+  # Merge datasets
+  initial_dup <- merge(initial, dup, by = c("statecode", "countycode"))
+  
+  # Main components to check
+  components <- c("numerator", "denominator", "rawvalue", "cilow", "cihigh")
+  
+  # Race subgroup suffixes
+  race_groups <- c("white", "black", "aian", "asian", "nhopi", "tom")
+  race_suffixes <- c("", "_cilow", "_cihigh")
+  race_components <- unlist(lapply(race_groups, function(rg) paste0("_race_", rg, race_suffixes)))
+  
+  # Full list of all components to check
+  all_components <- c(components, race_components)
+  
+  # Initialize list for NA counts
+  na_report <- list()
+  
+  # Loop over all components to calculate absolute differences
+  for (comp in all_components) {
+    col_x <- paste0(measure_num, comp, ".x")
+    col_y <- paste0(measure_num, comp, ".y")
+    diff_col <- paste0("diff", comp)
+    
+    if (col_x %in% names(initial_dup) && col_y %in% names(initial_dup)) {
+      initial_dup[[diff_col]] <- abs(initial_dup[[col_x]] - initial_dup[[col_y]])
+      
+      na_report[[comp]] <- c(
+        initial_NA = sum(is.na(initial_dup[[col_x]])),
+        duplicated_NA = sum(is.na(initial_dup[[col_y]]))
+      )
+    } else {
+      warning(paste("Missing expected columns:", col_x, "or", col_y))
+    }
+  }
+  
+  # Print summary of differences
+  cat("Summary of Differences:\n")
+  print(sapply(initial_dup %>% select(starts_with("diff")), summary))
+  
+  # Print summary of missing values
+  cat("\nMissing Value Report:\n")
+  na_df <- do.call(rbind, na_report) %>% as.data.frame()
+  print(na_df)
+  
+  # Filter rows with any significant differences
+  temp <- initial_dup %>% filter(if_any(starts_with("diff"), ~ abs(.) > 0.001))
+  
+  cat(paste("\n", nrow(temp), "rows with significant mismatches found.\n"))
+  
+  return(temp)
+}
