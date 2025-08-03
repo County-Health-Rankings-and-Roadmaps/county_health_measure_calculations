@@ -10,7 +10,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # about
 
-v125	Air pollution - particulate matter
+## Basic information
+
+- Description
+Average daily density of fine particulate matter in micrograms per cubic meter (PM2.5).
+
+## Raw data access
+
+- Website to downloaded data
+
+https://ephtracking.cdc.gov/DataExplorer/
+
+- Online documentation
+
+https://ephtracking.cdc.gov/indicatorPages
+
 
 # import packages
 
