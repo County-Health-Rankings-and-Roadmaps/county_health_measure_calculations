@@ -10,8 +10,8 @@ This repository is a work in progress. It contains code and data to replicate so
 * **`dictionaries_and_documentation/`** – Data dictionaries, technical notes, and other documentation to support understanding and use of the data.  
   - This folder contains **year-specific subfolders**, each holding the documentation for that year's release.
 
-* **`relational_datasets/`** – Relational hierarchy of measure metadata. Most useful for analysts interested in exploring measure weights, definitions, and model position.     
- - This folder contains **year-specific subfolders**, each holding the relational data for that year's release.
+* **`relational_datasets/`** – Relational hierarchy of measure metadata. Most useful for analysts interested in exploring measure weights, definitions, and model position.
+  - This folder contains **year-specific subfolders**, each holding the relational data for that year's release.
    
 * **`inputs/`** – Standardized reference files used across multiple measures (e.g., crosswalks, FIPS codes).  
   - Currently available **only for the 2025 and partially for the 2026 release**. This folder is not organized by year. 
