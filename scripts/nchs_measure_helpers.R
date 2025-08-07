@@ -1079,7 +1079,7 @@ get_race_data <- function(df, race_cat = 1, race_group = "white", version = "v00
     df <- df %>%
       rename_with(.fn = ~ paste0(version, "_race_", race_group, "_", .x), 
                   .cols = c("denominator", "numerator", "cilow", "cihigh"))
-  } else if (version == "v147") {
+  } else if (version %in% c("v147", "v129")) {
     df <- df %>%
       rename_with(.fn = ~ paste0(version, "_race_", race_group, "_", .x), 
                   .cols = c("cilow", "cihigh"))
