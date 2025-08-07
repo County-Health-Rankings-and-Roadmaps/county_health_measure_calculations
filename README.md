@@ -20,12 +20,12 @@ This repository is a work in progress. It contains code and data to replicate so
   - Currently available **only for the 2025 and partially for the 2026 release**. This folder is not organized by year. 
 
 * **`raw_data/`** – Original, unprocessed data files from source systems or data providers.  
-  - Currently available **only for the 2025 and partially for the 2026 release**. This folder is not organized by year. 
+  - Currently available **only for the 2025 and partially for the 2026 release**. This folder is organized by data source. It is not organized by year. 
   - *Note: Some raw data are not included if they are not publicly available.*
 
 * **`scripts/`** – R scripts (`.qmd`, `.Rmd`) and some SAS files for data cleaning, calculation, and formatting of measures.  
   - Currently available **only for the 2025 and partially for the 2026 release**. This folder is not organized by year.  
----
+
 
 We recommend using the `haven` R package to read `.sas7bdat` files in R. 
 
