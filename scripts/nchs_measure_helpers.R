@@ -1708,7 +1708,7 @@ update_mort_us_from_state_sub61 <- function(df_mort_all){
 # function: save calculated data as a csv file
 save_data <- function(df, vnum, output_dir = "../measure_datasets/") {
   # Construct the filename. Use paste0 for efficiency.
-  filename <- glue("{output_dir}{vnum}_r2026.csv")
+  filename <- glue("{output_dir}{vnum}_r2025.csv")
   
   # Write the CSV file with error handling.  Use tryCatch for robust error management.
   tryCatch({
