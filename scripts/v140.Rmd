@@ -1,0 +1,202 @@
+---
+title: "v140 Social Associations - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+- Description
+Number of membership associations per 10,000 population.
+
+- What is the numerator?
+The numerator is the total number of membership associations in a county. The membership organizations (NAICS code) in this measure include civic organizations (813410), bowling centers (713950), golf clubs (713910), fitness centers (713940), sports organizations (711211), religious organizations (813110), political organizations (813940), labor organizations (813930), business organizations (813910), and professional organizations (813920).
+
+- What is the denominator?
+The denominator is the total resident population of a county.
+
+## Raw data access
+
+Website to downloaded data: 
+https://www.census.gov/data/datasets/2022/econ/cbp/2022-cbp.html
+
+Directions: 
+Download "Complete County File", "Complete State File", "Complete U.S. File"
+
+Online documentation: 
+https://www.census.gov/programs-surveys/cbp/technical-documentation.html
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# import raw data
+
+```{r}
+raw_dir <- "../raw_data/CBP"
+
+cbp_cnt <- read_delim(file.path(raw_dir, "cbp22co.zip") ,
+                      delim = ",") %>% 
+  janitor::clean_names() %>% 
+  select(statecode = fipstate, countycode = fipscty, naics, est)
+
+cbp_cnt
+```
+
+
+```{r}
+cbp_st <- read_delim(file.path(raw_dir, "cbp22st.zip"),
+                     delim = ",") %>% 
+  janitor::clean_names() %>% 
+  select(statecode = fipstate, lfo, naics, est)
+
+cbp_us <- read_delim(file.path(raw_dir, "cbp22us.zip"),
+                     delim = ",") %>% 
+  janitor::clean_names() %>% 
+  select(lfo, naics, est)
+```
+
+```{r}
+vintage2022 <- read_sas("../inputs/vintage2022_with_ct_new.sas7bdat") %>% 
+  janitor::clean_names() %>% 
+  select(statecode, countycode, pop = popestimate2022) %>% 
+  glimpse()
+```
+
+# county
+
+```{r}
+naics_list <- c('813410', '713950', '713910', '713940', '711211', 
+                '813110', '813940' , '813930','813910', '813920') 
+
+cbp_cnt_1 <- cbp_cnt %>% 
+  filter(naics %in% naics_list) %>% 
+  group_by(statecode, countycode) %>% 
+  summarise(est = sum(est, na.rm = TRUE), .groups = "drop")
+
+cbp_cnt_1
+```
+
+# state
+
+```{r}
+cbp_st_1 <- cbp_st %>%  
+  filter(naics %in% naics_list, lfo == "-") %>% 
+  group_by(statecode) %>% 
+  summarise(est = sum(est, na.rm = TRUE)) %>% 
+  mutate(countycode = "000", .after = "statecode")
+
+cbp_st_1
+```
+
+# us
+
+```{r}
+cbp_us_1 <- cbp_us %>% 
+  filter(naics %in% naics_list, lfo == "-") %>% 
+  summarise(est = sum(est, na.rm = TRUE)) %>% 
+  mutate(statecode = "00", countycode = "000", .before = "est")
+```
+
+# combine county, state, us data
+
+```{r}
+cbp_all <- 
+  bind_rows(
+    cbp_cnt_1, 
+    cbp_st_1, 
+    cbp_us_1) %>% 
+  arrange(statecode, countycode) 
+
+cbp_all
+```
+
+# add population data
+
+```{r}
+vintage2022_1 <- 
+  bind_rows(
+    # add US total population
+    vintage2022 %>%
+      filter(statecode != "00", countycode == "000") %>% 
+      summarise(pop = sum(pop)) %>% 
+      mutate(statecode = "00", countycode = "000", .before = 1),
+  
+  vintage2022 %>% 
+    filter(statecode != "00") 
+    
+    ) %>% 
+  arrange(statecode, countycode)
+
+vintage2022_1
+```
+
+```{r}
+cbp_all_2 <- vintage2022_1 %>% 
+  left_join(cbp_all, by = c("statecode", "countycode")) %>% 
+  select(statecode, countycode, v140_numerator = est, 
+         v140_denominator = pop) %>% 
+  mutate(v140_numerator = if_else(is.na(v140_numerator), 0, v140_numerator)) %>% 
+  mutate(v140_rawvalue = v140_numerator/v140_denominator * 10000,
+         v140_cilow = NA_real_, v140_cihigh = NA_real_, v140_sourceflag = NA_real_)
+
+cbp_all_2
+```
+
+# standard fips
+
+```{r}
+v140 <- fips %>% 
+  select(statecode, countycode) %>% 
+  left_join(cbp_all_2, by = c("statecode", "countycode"))
+
+v140
+```
+
+# add flag_CT
+
+```{r}
+CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+v140_1 <- v140 %>% 
+  mutate(v140_flag_CT = case_when(
+    statecode == "09" & countycode %in% CT_old_lst ~ "U",
+    statecode == "09" & countycode %in% CT_new_lst ~ "A",
+    TRUE ~ NA
+  ))
+
+v140_1
+```
+
+# save data
+
+```{r}
+write_csv(v140_1, 
+          paste0("../measure_datasets/", "v140", "_r2025",
+                 ".csv"),
+          na = "")
+```

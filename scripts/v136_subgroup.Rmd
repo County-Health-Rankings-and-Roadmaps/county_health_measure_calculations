@@ -1,0 +1,706 @@
+---
+title: "v136 Severe Housing Problems (subgroups) - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+- Description
+Percentage of households with at least 1 of 4 housing problems: overcrowding, high housing costs, lack of kitchen facilities, or lack of plumbing facilities.
+
+- What is the numerator?
+The numerator is the number of households with 1 of 4 housing problems: lack of kitchen facilities, lack of plumbing facilities, overcrowding, or high housing costs. Incomplete kitchen facilities is defined as a unit which lacks a sink with running water, a stove or range, or a refrigerator. Incomplete plumbing facilities is defined as lacking hot and cold piped water, a flush toilet, or a bathtub/shower. Overcrowding is defined as more than one person per room. Severe cost burden is defined as monthly housing costs (including utilities) that exceed 50% of monthly income.
+
+- What is the denominator?
+The denominator is the total number of households in a county.
+
+## Raw data access
+
+Website to downloaded data:  
+https://www.huduser.gov/portal/datasets/cp.html
+
+**Directions:**
+
+1. Go to https://www.huduser.gov/portal/datasets/cp.html
+
+2. Click 'Data'
+
+3. Select data year: 2017-2021 ACS 5-year average data
+
+4. Select geographic summary level: 'States' or 'Counties' or 'Census Tracts'
+
+5. Select file type: csv
+
+6. Click 'Download' to download States, Counties, and Census Tracts data
+
+Online documentation:
+https://www.huduser.gov/portal/datasets/cp/CHAS/bg_chas.html
+
+## Subgroup calculations
+
+-   Inadequate facilities (other data 3): Table 3
+
+Table 3 - Tenure (2) by Housing Unit Problem Severity (7) by Household Income (5)
+
+-   Overcrowding (other data 2): Table 10
+
+Table 10 - Tenure (2) by Overcrowding (3) by Household Income (5) by Family Status (3)
+
+-   Severe cost burden (other data 1): Table 8
+
+Table 8	- Tenure (2) by Household Income (5) by Housing Cost Burden (4) by Substandard Housing (2)
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r}
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# helpers
+
+## function: read_chas_table()
+
+```{r}
+read_chas_table <- function(dir, tb_name, cols) {
+  df <- read_csv(
+    unz(dir, tb_name)
+    ) %>%
+    janitor::clean_names() %>% 
+    select(cols) %>% 
+    glimpse()
+  
+  return(df)
+}
+
+```
+
+## func: pad_0()
+```{r}
+pad_0 <- function(string, width){
+  str_pad(string, width = width, side = "left", pad = "0")
+}
+```
+
+## func: cal_tabl_3
+
+```{r}
+cal_tabl_3 <- function(df){
+  res <- df %>% 
+    rename(denominator = t3_est1) %>% 
+    mutate(numerator = t3_est3 + t3_est46, 
+           rawvalue = numerator/denominator) %>% 
+    mutate(se_n = (sqrt(t3_moe3^2+t3_moe46^2))/1.645,
+           se_d = (t3_moe1)/1.645, 
+           temp = se_n^2 - (rawvalue^2 * se_d^2)
+           )  %>% 
+    mutate(se_pct = sqrt(se_n^2 - (rawvalue^2 * se_d^2))/denominator) %>% 
+    mutate(cilow = rawvalue - (se_pct*1.96), 
+           cihigh = rawvalue + (se_pct*1.96)) %>% 
+    mutate(cilow = if_else(cilow<0, 0, cilow)) %>% 
+    select(-c(starts_with("t3"), starts_with("se"), temp))
+  
+  return(res)
+}
+```
+
+## func: get national value
+```{r}
+get_us_value <- function(df){
+  res <- df %>% 
+    filter(countycode == "000") %>% 
+    summarise(statecode = "00", countycode = first(countycode),
+              denominator = sum(denominator), numerator = sum(numerator)) %>% 
+    mutate(rawvalue = numerator/denominator)
+  
+  return(res)
+}
+```
+
+## func: select_rename_cols_v136()
+```{r}
+select_rename_cols_v136 <- function(df, col_prefix){
+  df %>% select(-c(denominator, numerator)) %>% 
+    rename(
+           !!(paste0(col_prefix)) := rawvalue, 
+           !!(paste0(col_prefix, "_cilow")) := cilow,
+           !!(paste0(col_prefix, "_cihigh")) := cihigh
+           )
+}
+```
+
+## func: cal_tabl_10
+
+```{r}
+cal_tabl_10 <- function(df){
+  res <- df %>% rename(denominator = t10_est1) %>% 
+    mutate(numerator = t10_est24 + t10_est45 + t10_est88 + t10_est109, 
+           rawvalue = numerator/denominator) %>% 
+    mutate(se_n = (sqrt(t10_moe24^2 + t10_moe45^2 + 
+                          t10_moe88^2 + t10_moe109^2))/1.645,
+           se_d = (t10_moe1)/1.645, 
+           temp = se_n^2 - (rawvalue^2 * se_d^2)
+           )  %>% 
+    mutate(se_pct = sqrt(se_n^2 - (rawvalue^2 * se_d^2))/denominator) %>% 
+    mutate(cilow = rawvalue - (se_pct*1.96), 
+           cihigh = rawvalue + (se_pct*1.96)) %>% 
+    # suppression
+    mutate(cilow = if_else(cilow<0, 0, cilow),
+           cihigh = if_else(cihigh>1, 1, cihigh)) %>% 
+    select(-c(starts_with("t10"), starts_with("se"), temp))
+  
+  return(res)
+    
+}
+```
+
+### function: cal_tabl_8
+
+```{r}
+cal_tabl_8 <- function(df){
+  res <- df %>% 
+    mutate(
+      denominator = t8_est1 - t8_est13 - t8_est26 - t8_est39 - t8_est52 - t8_est65
+        - t8_est79 - t8_est92 - t8_est105 - t8_est118 - t8_est131,
+      numerator = t8_est10 + t8_est23 + t8_est36 + t8_est49 + t8_est62
+        + t8_est76 + t8_est89 + t8_est102 + t8_est115 + t8_est128,
+      rawvalue = numerator / denominator
+    ) %>%
+    mutate(
+      se_n = (sqrt(t8_moe10^2 + t8_moe23^2 + t8_moe36^2 + t8_moe49^2 + 
+                     t8_moe62^2 + t8_moe76^2 + t8_moe89^2 + t8_moe102^2 + 
+                     t8_moe115^2 + t8_moe128^2)) / 1.645,
+      se_d = (sqrt(t8_moe1^2
+        + t8_moe13^2 + t8_moe26^2 + t8_moe39^2 + t8_moe52^2 + t8_moe65^2
+        + t8_moe79^2 + t8_moe92^2 + t8_moe105^2 + t8_moe118^2 + 
+          t8_moe131^2)) / 1.645,
+      temp = se_n^2 - (rawvalue^2 * se_d^2)
+    ) %>%
+    mutate(se_pct = sqrt(se_n^2 - (rawvalue^2 * se_d^2)) / denominator) %>%
+    mutate(
+      cilow = rawvalue - (se_pct * 1.96),
+      cihigh = rawvalue + (se_pct * 1.96)
+    ) %>%
+    # suppression
+    mutate(
+      cilow = if_else(cilow < 0, 0, cilow),
+      cihigh = if_else(cihigh > 1, 1, cihigh)
+    ) %>%
+    select(-c(starts_with("t8"), starts_with("se"), temp))
+  
+  return(res)
+}
+```
+
+# Table 3: Inadequate facitilities (other data 3) 
+
+## import chas data
+
+```{r}
+# raw data dir
+raw_dir <- "../raw_data/CHAS/chas2017thru2021.zip"
+
+# county
+t3_ct_file_name <-  "Table3_county.csv"
+t3_cols_selected <- c("st", "cnty", 
+                   "t3_est1", "t3_est3", "t3_est46", 
+                   "t3_moe1", "t3_moe3", "t3_moe46")
+
+Inadequate_facitilities_cnty <- read_chas_table(
+  raw_dir,
+  t3_ct_file_name,
+  t3_cols_selected
+)
+
+# state
+t3_st_file_name <- "Table3_state.csv"
+
+Inadequate_facitilities_st <- read_chas_table(
+  raw_dir,
+  t3_st_file_name,
+  t3_cols_selected[-2] # no "cnty" column
+)
+```
+
+## combine county and state data
+
+```{r}
+inadequatefac_st_cnty <- Inadequate_facitilities_st %>% 
+  mutate(cnty = '000', .after = "st") %>% 
+  bind_rows(Inadequate_facitilities_cnty) %>% 
+  mutate(st = as.numeric(st)) %>% 
+  filter(st<=56) %>% 
+  mutate(st = pad_0(st, 2),
+         cnty = pad_0(cnty, 3)) %>% 
+  rename(statecode = st, countycode = cnty) %>% 
+  cal_tabl_3() %>%
+  glimpse()
+```
+
+## national value
+
+```{r}
+inadequatefac_us <- inadequatefac_st_cnty %>% 
+  get_us_value() %>% 
+  glimpse()
+
+inadequatefac_us
+```
+
+## county + state + us
+
+```{r}
+inadequatefac_all <-
+  bind_rows(
+    inadequatefac_st_cnty,
+    inadequatefac_us
+  ) %>%  
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+## rename columns
+
+```{r}
+v136_otherdata_3 <- select_rename_cols_v136(inadequatefac_all,
+                                            "v136_other_data_3") %>% 
+  glimpse()
+
+```
+
+# Table 10: Overcrowding (other data 2)
+
+## import chas data
+```{r}
+# county
+t10_cnty_file_name <-  "Table10_county.csv"
+t10_cols_selected <- c("st", "cnty", 
+                   "t10_est1", "t10_est24", "t10_est45", "t10_est88", "t10_est109",
+                   "t10_moe1", "t10_moe24", "t10_moe45", "t10_moe88", "t10_moe109")
+
+overcrowding_ct <- read_chas_table(
+  raw_dir,
+  t10_cnty_file_name,
+  t10_cols_selected
+)
+
+# state
+t10_st_file_name <- "Table10_state.csv"
+overcrowding_st <- read_chas_table(
+  raw_dir,
+  t10_st_file_name,
+  t10_cols_selected[-2] # no "cnty" column
+)
+```
+
+## combine county and state data
+
+```{r}
+overcrowding_st_cnty <- overcrowding_st %>% 
+  mutate(cnty = '000', .after = "st") %>% 
+  bind_rows(overcrowding_ct) %>% 
+  mutate(st = as.numeric(st)) %>% 
+  filter(st<=56) %>% 
+  mutate(st = pad_0(st, 2),
+         cnty = pad_0(cnty, 3)) %>% 
+  rename(statecode = st, countycode = cnty) %>% 
+  cal_tabl_10() %>%
+  glimpse()
+```
+
+## national value
+
+```{r}
+overcrowding_us <- overcrowding_st_cnty %>% 
+  get_us_value() %>% 
+  glimpse()
+```
+
+## county + state + us
+
+```{r}
+overcrowding_all <- overcrowding_st_cnty %>% 
+  bind_rows(overcrowding_us) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+## rename columns
+
+```{r}
+v136_otherdata_2 <- select_rename_cols_v136(
+  overcrowding_all,
+  "v136_other_data_2"
+) %>%
+  glimpse()
+
+```
+
+# Table 8: Severe cost burden (other data 1)
+
+## import chas data
+
+```{r}
+# county
+t8_cnty_file_name <-  "Table8_county.csv"
+t8_cols_selected <- c("st", "cnty", 
+                      # numerator
+                      "t8_est1",   "t8_est13",  "t8_est26", "t8_est39", 
+                      "t8_est52",  "t8_est65",  "t8_est79", "t8_est92", 
+                      "t8_est105", "t8_est118", "t8_est131",
+                      
+                      "t8_moe1",   "t8_moe13",  "t8_moe26", "t8_moe39", 
+                      "t8_moe52",  "t8_moe65",  "t8_moe79", "t8_moe92", 
+                      "t8_moe105", "t8_moe118", "t8_moe131",
+                      
+                      # denominator
+                      "t8_est10",  "t8_est23", "t8_est36", "t8_est49", 
+                      "t8_est62",  "t8_est76", "t8_est89", "t8_est102", 
+                      "t8_est115", "t8_est128",
+                      
+                      "t8_moe10",  "t8_moe23", "t8_moe36", "t8_moe49", 
+                      "t8_moe62",  "t8_moe76", "t8_moe89", "t8_moe102", 
+                      "t8_moe115", "t8_moe128"
+                      )
+
+severecostburden_cnty <- read_chas_table(
+  raw_dir,
+  t8_cnty_file_name,
+  t8_cols_selected
+)
+
+# state
+t8_st_file_name <- "Table8_state.csv"
+severecostburden_st <- read_chas_table(
+  raw_dir,
+  t8_st_file_name,
+  t8_cols_selected[-2] # no "cnty" column
+)
+```
+
+## combine county and state data
+
+```{r}
+severecostburden_st_cnty <- severecostburden_st %>%
+  mutate(cnty = '000', .after = "st") %>%
+  bind_rows(severecostburden_cnty) %>%
+  mutate(st = as.numeric(st)) %>% 
+  filter(st <= 56) %>%
+  mutate(
+    st = pad_0(st, 2),
+    cnty = pad_0(cnty, 3)
+  ) %>%
+  rename(statecode = st, countycode = cnty) %>%
+  cal_tabl_8() %>%
+  glimpse()
+```
+
+## national value
+
+```{r}
+severecostburden_us <- severecostburden_st_cnty %>% 
+  get_us_value() %>% 
+  glimpse()
+```
+
+## county + state + us
+
+```{r}
+severecostburden_all <- severecostburden_st_cnty %>% 
+  bind_rows(severecostburden_us) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+## rename columns
+
+```{r}
+v136_otherdata_1 <- select_rename_cols_v136(
+  severecostburden_all,
+  "v136_other_data_1"
+) %>%
+  glimpse()
+
+```
+
+# combine 3 data sets
+
+```{r}
+v136_otherdata <- purrr::reduce(
+  list(
+       v136_otherdata_1,
+       v136_otherdata_2,
+       v136_otherdata_3
+       ), 
+  dplyr::left_join, 
+  by = c("statecode", "countycode"))
+
+v136_otherdata
+```
+
+#----------
+
+# Calculate new CT counties data from tract data
+
+## tract crosswalk: 2020 tracts - 2022 counties
+
+```{r}
+ct_linked_tracts20_counties22 <- read_sas("../inputs/ct_tract_crosswalk.sas7bdat") %>% 
+  select(tract_fips_2020 = tract_fipscode_2020, county_fipscode_2022) %>% 
+  mutate(statecode = "09", 
+         countycode_2022 = str_sub(county_fipscode_2022, 3L, 5L)) %>% 
+  select(statecode, countycode_2022, tract_fips_2020) %>% 
+  arrange(statecode, countycode_2022)
+
+ct_linked_tracts20_counties22
+```
+
+
+## table 3
+
+```{r}
+t3_tract_file_name <- "Table3_tract.csv"
+
+Inadequate_facitilities_tract <- read_chas_table(
+  raw_dir,
+  t3_tract_file_name,
+  c(t3_cols_selected, 'tract')
+) %>% 
+  janitor::clean_names() %>%
+  filter(st == '09') %>% 
+  mutate(st = pad_0(st, 2),
+         cnty = pad_0(cnty, 3),
+         tract = pad_0(tract, 6)) %>% 
+  glimpse()
+
+Inadequate_facitilities_tract
+```
+
+### link tracts to new county FIPS codes
+
+```{r}
+Inadequate_facitilities_tract_linked <- Inadequate_facitilities_tract %>% 
+  rename(statecode = st, countycode_2020 = cnty) %>% 
+  mutate(tract_fips_2020 = paste0(statecode, countycode_2020, tract), .after = 3) %>% 
+  select(-tract) %>% 
+  left_join(ct_linked_tracts20_counties22, 
+            by = c("statecode", "tract_fips_2020"))
+
+Inadequate_facitilities_tract_linked
+```
+
+### calculate for CT new counties
+
+```{r}
+Inadequate_facitilities_CT_new <- Inadequate_facitilities_tract_linked %>% 
+  rename(countycode = countycode_2022) %>% 
+  select(-c(tract_fips_2020, countycode_2020)) %>% 
+  group_by(statecode, countycode) %>% 
+  summarise(across(contains("est"), ~sum(., na.rm = TRUE)),
+            across(contains("moe"), ~sqrt(sum(.^2, na.rm = TRUE))),
+            .groups = "drop"
+            ) %>% 
+  filter(!is.na(countycode)) %>% 
+  cal_tabl_3() %>% 
+  select_rename_cols_v136("v136_other_data_3") %>% 
+  glimpse()
+
+Inadequate_facitilities_CT_new
+```
+
+## table 10
+
+```{r}
+t10_tract_file_name <- "Table10_tract.csv"
+
+overcrowding_tract <- read_chas_table(
+  raw_dir,
+  t10_tract_file_name,
+  c(t10_cols_selected, 'tract')
+) %>% 
+  janitor::clean_names() %>%
+  filter(st == '09') %>% 
+  mutate(st = pad_0(st, 2),
+         cnty = pad_0(cnty, 3),
+         tract = pad_0(tract, 6)) %>% 
+  glimpse()
+
+overcrowding_tract
+```
+
+### link tracts to new county FIPS codes
+
+```{r}
+overcrowding_tract_linked <- overcrowding_tract %>% 
+  rename(statecode = st, countycode_2020 = cnty) %>% 
+  mutate(tract_fips_2020 = paste0(statecode, countycode_2020, tract), .after = 3) %>% 
+  select(-tract) %>% 
+  left_join(ct_linked_tracts20_counties22, 
+            by = c("statecode", "tract_fips_2020"))
+
+overcrowding_tract_linked
+```
+
+### calculate for CT new counties
+
+```{r}
+overcrowding_CT_new <- overcrowding_tract_linked %>% 
+  rename(countycode = countycode_2022) %>% 
+  select(-c(tract_fips_2020, countycode_2020)) %>% 
+  group_by(statecode, countycode) %>% 
+  summarise(across(contains("est"), ~sum(., na.rm = TRUE)),
+            across(contains("moe"), ~sqrt(sum(.^2, na.rm = TRUE))),
+            .groups = "drop"
+            ) %>% 
+  filter(!is.na(countycode)) %>% 
+  cal_tabl_10() %>% 
+  select_rename_cols_v136("v136_other_data_2") %>% 
+  glimpse()
+
+overcrowding_CT_new
+```
+
+## table 8
+
+```{r}
+t8_tract_file_name <- "Table8_tract.csv"
+
+severecostburden_tract <- read_chas_table(
+  raw_dir,
+  t8_tract_file_name,
+  c(t8_cols_selected, 'tract')
+) %>% 
+  janitor::clean_names() %>%
+  filter(st == '09') %>% 
+  mutate(st = pad_0(st, 2),
+         cnty = pad_0(cnty, 3),
+         tract = pad_0(tract, 6)) %>% 
+  glimpse()
+
+severecostburden_tract
+```
+
+### link tracts to new county FIPS codes
+
+```{r}
+severecostburden_tract_linked <- severecostburden_tract %>% 
+  rename(statecode = st, countycode_2020 = cnty) %>% 
+  mutate(tract_fips_2020 = paste0(statecode, countycode_2020, tract), .after = 3) %>% 
+  select(-tract) %>% 
+  left_join(ct_linked_tracts20_counties22, 
+            by = c("statecode", "tract_fips_2020"))
+
+severecostburden_tract_linked
+```
+
+### calculate for CT new counties
+
+```{r}
+severecostburden_CT_new <- severecostburden_tract_linked %>% 
+  rename(countycode = countycode_2022) %>% 
+  select(-c(tract_fips_2020, countycode_2020)) %>% 
+  group_by(statecode, countycode) %>% 
+  summarise(across(contains("est"), ~sum(., na.rm = TRUE)),
+            across(contains("moe"), ~sqrt(sum(.^2, na.rm = TRUE))),
+            .groups = "drop"
+            ) %>% 
+  filter(!is.na(countycode)) %>% 
+  cal_tabl_8()%>%
+  select_rename_cols_v136("v136_other_data_1") %>% 
+  glimpse()
+
+severecostburden_CT_new
+```
+
+## combine results
+
+```{r}
+v136_other_CT_new <- purrr::reduce(
+  list(
+    severecostburden_CT_new, 
+    overcrowding_CT_new,
+    Inadequate_facitilities_CT_new
+    ), 
+  dplyr::left_join, 
+  by = c("statecode", "countycode"))
+
+v136_other_CT_new
+```
+
+# v136_otherdata with CT new counties
+
+```{r}
+v136_otherdata_r2025 <- bind_rows(
+  v136_otherdata %>% 
+    filter(!(statecode == "09" & countycode != "000")),
+  
+  v136_other_CT_new
+) %>% 
+  arrange(statecode, countycode)
+
+v136_otherdata_r2025
+```
+
+# standard FIPS
+
+```{r}
+v136_otherdata_r2025_2 <- fips %>% 
+  select(statecode, countycode) %>% 
+  left_join(v136_otherdata_r2025, by = c("statecode", "countycode"))
+
+v136_otherdata_r2025_2
+```
+
+# add flag_CT
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+v136_otherdata_r2025_3 <- v136_otherdata_r2025_2 %>% 
+  add_flag_CT(vnum = "v136_other", old="U", new = "A")
+
+v136_otherdata_r2025_3
+```
+
+# save data
+
+```{r}
+write_csv(v136_otherdata_r2025_3,
+          paste0("../measure_datasets/", "v136_otherdata", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
