@@ -1,0 +1,297 @@
+---
+title: "v171 and v172 - R2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## v170 Living Wage
+
+### Basic information
+
+- Description
+The hourly wage needed to cover basic household expenses plus all relevant taxes for a household of one adult and two children.
+
+### Raw data access
+
+Website to downloaded data:
+https://livingwage.mit.edu/
+
+**Directions**
+
+Data for the entire country can't be downloaded from the website, but users can look up individual areas. 
+
+**Online documentation**
+
+https://livingwage.mit.edu/pages/methodology
+
+## v171 Child Care Cost Burden
+
+### Basic information
+
+- Description
+Child care costs for a household with two children as a percent of median household income.
+
+- What is the numerator?
+Child care cost data provided by the Living Wage Institute.
+
+- What is the denominator?
+Median household income data calculated from the Small Area Income and Poverty Estimates.
+
+### Raw data access
+
+Website to downloaded data:
+https://www.census.gov/data/datasets/2022/demo/saipe/2022-state-and-county.html
+
+**Directions**
+
+Data for child care costs for the entire country can't be downloaded from the website, but users can look up individual areas: https://livingwage.mit.edu/. 
+
+**Online documentation**
+
+https://www.census.gov/programs-surveys/saipe/technical-documentation/methodology/counties-states/county-level.html
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# import raw data
+
+## MIT LWC data
+
+Data provided by MIT LWC; not allowed to put on GitHub.
+
+#### county data
+```{r}
+data_raw <- "C:/01_CHRR/data/r2025/raw/mit_lwc"
+
+mit_lwc_ct_2025 <- read_xlsx(
+  file.path(data_raw, 
+            "LWI-BenchmarkSeries-County-University of Wisconsin – Madison, Population Health Institute-2025-02-18.xlsx")
+  ) %>% 
+  select(fipscode = county_fips, 
+         cost_childcare, 
+         living_wage = hourly_living_wage) %>% 
+  mutate(statecode = str_sub(fipscode, 1L, 2L),
+         countycode = str_sub(fipscode, 3L, 5L), .before = 1) %>% 
+  glimpse()
+```
+
+### state data
+```{r}
+mit_lwc_st_2025 <- read_xlsx(
+  file.path(data_raw, 
+            "LWI-BenchmarkSeries-State-University of Wisconsin – Madison, Population Health Institute-2025-02-20.xlsx")
+  ) %>%  
+  select(statecode = state_fips, 
+         cost_childcare, 
+         living_wage = hourly_living_wage) %>% 
+  mutate(statecode = str_pad(statecode, 2, "left", "0"),
+         countycode = "000", .after = 1) %>% 
+  glimpse()
+```
+
+### county + state
+
+```{r}
+mit_lwc_2025 <- bind_rows(
+  mit_lwc_ct_2025, 
+  mit_lwc_st_2025) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+### clean data
+
+```{r}
+mit_lwc_2025_2 <- fips %>% 
+  select(statecode, countycode) %>% 
+  left_join(mit_lwc_2025, by = c("statecode", "countycode")) %>% 
+  select(-fipscode) %>% 
+  glimpse()
+```
+
+## v063 Median Household Income
+
+Connecticut (CT, state FIPS code 09) counties and state: 
+
+Overall population: 2023 SAIPE data use new county-equivalent planning region geographies in CT. In 2024 rankings, 2021 SAIPE data were used for legacy CT counties and state (i.e., carry over CT county and state data from 2023 rankings). 
+
+```{r}
+v063 <- read_csv(here::here('measure_datasets/v063_r2025.csv')) %>% 
+  select(statecode, countycode, v063_rawvalue) %>% 
+  glimpse()
+
+```
+
+```{r}
+# from 2024 release
+v063_CT_r2024 <- tibble::tribble(
+  ~statecode, ~countycode, ~v063_rawvalue,
+  '09',	'001',	100703,		
+  '09',	'003',	79958,		
+  '09',	'005',	84689,		
+  '09',	'007',	94735,		
+  '09',	'009',	75094,		
+  '09',	'011',	78552,		
+  '09',	'013',	86430,		
+  '09',	'015',	71581
+  )
+
+```
+
+```{r}
+v063_2 <- bind_rows(
+  v063 %>% filter(!(statecode == "09" & countycode != "000")),
+  v063_CT_r2024
+) %>% 
+  arrange(statecode, countycode)
+
+v063_2
+```
+
+# v171
+
+## county data
+
+```{r}
+v171_ct <- mit_lwc_ct_2025 %>% 
+  select(1:2, cost_childcare) %>% 
+  left_join(v063_2, by = c('statecode', 'countycode'))%>% 
+  rename(v171_numerator = cost_childcare, v171_denominator = v063_rawvalue) %>% 
+  mutate(v171_rawvalue = v171_numerator/v171_denominator, 
+         .before = 'v171_numerator') %>% 
+  mutate(v171_cilow = NA_real_, v171_cihigh = NA_real_, 
+         v171_sourceflag = NA_real_)
+
+```
+
+## state from county median
+
+```{r}
+v171_st <- v171_ct %>% 
+  group_by(statecode) %>% 
+  summarise(countycode = "000",
+            v171_rawvalue = median(v171_rawvalue, na.rm = TRUE),
+            v171_numerator = NA_real_, v171_denominator = NA_real_)
+
+```
+
+## us
+
+```{r}
+v171_us <- v171_ct %>% 
+  summarise(statecode = "00", countycode = "000",
+            v171_rawvalue = median(v171_rawvalue, na.rm = TRUE),
+            v171_numerator = NA_real_, v171_denominator = NA_real_)
+
+```
+
+## county+state+us
+
+```{r}
+v171_all <- bind_rows(v171_ct, v171_st, v171_us) %>% 
+  arrange(statecode, countycode)
+```
+
+## standardize FIPS add flag_CT
+
+```{r}
+v171_all_2 <- fips %>%
+  select(statecode, countycode) %>%
+  left_join(v171_all, by = c("statecode", "countycode")) 
+
+```
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+v171_all_3 <- v171_all_2 %>% 
+  add_flag_CT(vnum = "v171", old="A", new = "U")
+
+```
+
+## save data
+
+```{r eval=FALSE}
+write_csv(v171_gl,
+  paste0(
+    data_out_path, "/",
+    "v171_r2025", 
+    ".csv"
+  ),
+  na = ""
+)
+
+```
+
+# v170
+
+## county + state
+```{r}
+v170 <- mit_lwc_2025_2 %>% 
+  select(1:2, 4) %>% 
+  rename(v170_rawvalue = living_wage) %>%
+  mutate(v170_numerator = NA_real_, v170_denominator = NA_real_,
+         .before = 3) %>% 
+  mutate(v170_cilow = NA_real_, v170_cihigh = NA_real_, 
+         v170_sourceflag = NA_real_)
+
+```
+
+## add flag_CT
+
+```{r}
+v170_2 <- v170 %>% 
+  add_flag_CT(vnum = "v170", old="A", new = "U")
+
+```
+
+## save data
+
+```{r eval=FALSE}
+write_csv(v170_2,
+  paste0(
+    data_out_path, "/",
+    "v170_r2025", 
+    ".csv"
+  ),
+  na = ""
+)
+```
