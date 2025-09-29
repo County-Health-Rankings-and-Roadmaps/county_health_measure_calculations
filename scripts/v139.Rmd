@@ -1,0 +1,198 @@
+---
+title: "v139 Food Insecurity - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+- Description
+Percentage of population who lack adequate access to food.
+
+- What is the numerator?
+The numerator is the population with a lack of access, at times, to enough food for an active, healthy life or with uncertain availability of nutritionally adequate foods.
+
+- What is the denominator?
+The denominator is the total county population.
+
+## Raw data access
+
+- Source: Map the Meal Gap (Requested data, i.e., not publicly available)
+
+Online documentation:
+https://map.feedingamerica.org/
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+# import raw data
+
+```{r}
+# requested data; saved on local drive, not on github 
+raw_dir <- "C:/01_CHRR/data/r2025/raw/mmg/MMG_Data_v3"
+
+# county data
+fa_cnt <- openxlsx::read.xlsx(file.path(raw_dir, "MMG2024_2019-2022_Data_ToShare_v3.xlsx"),
+                        sheet = "County") %>% 
+  janitor::clean_names() %>% 
+  filter(year == 2022) %>% 
+  select(fips, rawvalue = overall_food_insecurity_rate,
+         numerator = number_of_food_insecure_persons_overall) %>% 
+  glimpse()
+
+# state data
+fa_st <- openxlsx::read.xlsx(file.path(raw_dir, "MMG2024_2019-2022_Data_ToShare_v3.xlsx"),
+                        sheet = "State") %>% 
+  janitor::clean_names() %>% 
+  filter(year == 2022) %>% 
+  select(fips, rawvalue = overall_food_insecurity_rate,
+         numerator = number_of_food_insecure_persons_overall) %>% 
+  glimpse()
+  
+```
+
+# process
+
+## combine county and state data
+
+```{r}
+fa <- bind_rows(fa_cnt, fa_st) %>% 
+  arrange(fips) %>% 
+  mutate(statecode = case_when(fips<100 ~ str_pad(fips, 2, "left", "0"),
+                               fips>1000 ~ str_sub(str_pad(fips, 5, "left", "0"), 1L, 2L)),
+         countycode = case_when(fips<100 ~ "000",
+                               fips>1000 ~ str_sub(str_pad(fips, 5, "left", "0"), 3L, 5L))
+         ) %>% 
+  select(-fips) %>% 
+  select(statecode, countycode, everything())
+
+fa
+```
+
+## fix DC
+
+adjusting D.C. to match 'state' value
+
+```{r}
+df_dc <- fa %>% 
+  filter(statecode == "11", countycode == "000") %>% 
+  mutate(countycode = "001")
+
+df_dc
+```
+
+-   replace row for 11001 with a new row 11001
+
+```{r}
+fa_2 <- fa %>% 
+  filter( !(statecode == "11" & countycode == "001")) %>% 
+  bind_rows(df_dc) %>% 
+  arrange(statecode, countycode)
+
+fa_2
+```
+
+## US
+
+US data comes from the bottom of this page: http://map.feedingamerica.org
+
+for 2022:
+
+- numerator = 44,151,000
+- rawvalue = 0.135
+
+```{r}
+fa_3 <- fa_2 %>% 
+  add_row(statecode = "00", countycode = "000", rawvalue = 0.135,
+          numerator = 44151000, .before = 1)
+
+fa_3
+```
+
+
+## column names
+
+```{r}
+fa_4 <- fa_3 %>% 
+  rename(v139_rawvalue = rawvalue, v139_numerator = numerator) %>% 
+  mutate(v139_denominator = NA_real_, v139_cilow = NA_real_, 
+         v139_cihigh = NA_real_, v139_sourceflag = NA_real_) %>% 
+  # order columns
+  select(statecode, countycode, v139_numerator, v139_denominator, v139_rawvalue,
+         v139_cilow, v139_cihigh, v139_sourceflag)
+
+fa_4
+```
+
+# standard fips
+
+```{r}
+v139 <- fips %>% 
+  select(statecode, countycode) %>% 
+  left_join(fa_4, by = c("statecode", "countycode"))
+
+v139
+```
+
+# add flag_CT
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+```
+
+
+```{r}
+v139_1 <- v139 %>% 
+  add_flag_CT(vnum = "v139", old="U", new = "A")
+
+v139_1
+```
+
+# save data
+
+```{r}
+write_csv(v139_1, 
+          paste0("../measure_datasets/", "v139", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
