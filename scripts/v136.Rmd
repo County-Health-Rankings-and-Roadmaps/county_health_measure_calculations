@@ -1,0 +1,328 @@
+---
+title: "v136 Severe Housing Problems - R2025"
+author: "GL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+- Description
+Percentage of households with at least 1 of 4 housing problems: overcrowding, high housing costs, lack of kitchen facilities, or lack of plumbing facilities.
+
+- What is the numerator?
+The numerator is the number of households with 1 of 4 housing problems: lack of kitchen facilities, lack of plumbing facilities, overcrowding, or high housing costs. Incomplete kitchen facilities is defined as a unit which lacks a sink with running water, a stove or range, or a refrigerator. Incomplete plumbing facilities is defined as lacking hot and cold piped water, a flush toilet, or a bathtub/shower. Overcrowding is defined as more than one person per room. Severe cost burden is defined as monthly housing costs (including utilities) that exceed 50% of monthly income.
+
+- What is the denominator?
+The denominator is the total number of households in a county.
+
+## Raw data access
+
+Website to downloaded data:  
+https://www.huduser.gov/portal/datasets/cp.html
+
+**Directions:**
+
+1. Go to https://www.huduser.gov/portal/datasets/cp.html
+
+2. Click 'Data'
+
+3. Select data year: 2017-2021 ACS 5-year average data
+
+4. Select geographic summary level: 'States' or 'Counties' or 'Census Tracts'
+
+5. Select file type: csv
+
+6. Click 'Download' to download States, Counties, and Census Tracts data
+
+Online documentation:
+https://www.huduser.gov/portal/datasets/cp/CHAS/bg_chas.html
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+
+```
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r}
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat") ,
+  read_sas( "../inputs/state_fips.sas7bdat"))  %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# helpers
+
+## function: read_chas_table()
+
+```{r}
+read_chas_table <- function(dir, tb_name, cols) {
+  df <- read_csv(
+    unz(dir, tb_name)
+    ) %>%
+    janitor::clean_names() %>% 
+    select(cols) %>% 
+    glimpse()
+  
+  return(df)
+}
+
+```
+
+## function: pad with 0
+```{r}
+pad_0 <- function(string, width){
+  str_pad(string, width = width, side = "left", pad = "0")
+}
+```
+
+## function: calculate v136
+```{r}
+cal_v136 <- function(df){
+  res <- df %>% 
+    rename(v136_denominator = t2_est1) %>% 
+    mutate(v136_numerator = t2_est3 + t2_est76, .after = "v136_denominator") %>% 
+    mutate(v136_rawvalue = v136_numerator/v136_denominator, 
+           .after="v136_numerator") %>% 
+    mutate(se_n = (sqrt(t2_moe3^2+t2_moe76^2))/1.645,
+           se_d = (t2_moe1)/1.645, 
+           temp = se_n^2 - (v136_rawvalue^2 * se_d^2)
+           ) %>%  
+    mutate(se_pct = sqrt(se_n^2 - (v136_rawvalue^2 * se_d^2))/v136_denominator
+      ) %>%
+    mutate(v136_cilow = v136_rawvalue - (se_pct*1.96), 
+           v136_cihigh = v136_rawvalue + (se_pct*1.96)) %>% 
+    select(-c(starts_with("t2"), starts_with("se"), temp))
+  
+  return(res)
+}
+```
+
+# import raw data
+
+```{r}
+raw_dir <- "../raw_data/CHAS/chas2017thru2021.zip"
+
+# county data
+severehousing_counties <-  
+  read_chas_table(
+    raw_dir,
+    "Table2_county.csv",
+    c("st", "cnty", "t2_est1", "t2_est3",
+      "t2_est76", "t2_moe1", "t2_moe3", "t2_moe76")
+)
+  
+# state data
+severehousing_states <-
+  read_chas_table(
+    raw_dir,
+    "Table2_state.csv",
+    c("st", "t2_est1", "t2_est3",
+      "t2_est76", "t2_moe1", "t2_moe3", "t2_moe76")
+)
+```
+
+# county data
+
+```{r}
+severehousing_counties_2 <- severehousing_counties %>% 
+  filter(st<=56) %>% 
+  mutate(st = pad_0(st, 2),
+         cnty = pad_0(cnty, 3)) %>% 
+  rename(statecode = st, countycode = cnty) %>% 
+  cal_v136() %>% 
+  glimpse()
+```
+
+# state data
+
+```{r}
+severehousing_st_2 <- severehousing_states %>% 
+  filter(st<=56) %>% 
+  mutate(st = pad_0(st, 2),
+         cnty = "000") %>% 
+  rename(statecode = st, countycode = cnty) %>%
+  cal_v136() %>% 
+  glimpse()
+```
+
+# us data
+```{r}
+severehousing_us <- severehousing_st_2 %>% 
+  summarise(v136_denominator = sum(v136_denominator),
+            v136_numerator = sum(v136_numerator),
+            statecode = "00",
+            countycode = "000") %>% 
+  mutate(v136_rawvalue = v136_numerator/v136_denominator) %>% 
+  glimpse()
+```
+
+# combine county, state, us data
+
+```{r}
+severehousing <- bind_rows(severehousing_counties_2, 
+                  severehousing_st_2, 
+                  severehousing_us) %>% 
+  mutate(v136_sourceflag = NA_real_) %>% 
+  select(1:2, v136_numerator, v136_denominator, everything()) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+```
+
+# supression
+
+```{r}
+v136 <- severehousing %>% 
+  mutate(v136_cilow = if_else(v136_cilow<0, 0, v136_cilow),
+         v136_cihigh = if_else(v136_cihigh>1, 1, v136_cihigh)) %>% 
+  mutate(v136_cilow = if_else(is.na(v136_cihigh), NA_real_, v136_cilow),
+         v136_cihigh = if_else(is.na(v136_cilow), NA_real_, v136_cihigh)) 
+
+v136
+```
+
+# standard FIPS
+
+```{r}
+# v136_2 <- fips %>% 
+#   select(1:2) %>% 
+#   left_join(v136,
+#             by = c("statecode", "countycode"))
+# 
+# v136_2
+```
+
+# Connecticut (CT): planning regions data from census tract data
+
+## CT tract data
+
+```{r}
+severehousing_tract <-
+  read_chas_table(
+    raw_dir,
+    "Table2_tract.csv",
+    c("st", "cnty", "tract", "t2_est1", "t2_est3",
+      "t2_est76", "t2_moe1", "t2_moe3", "t2_moe76")
+    ) %>% 
+  filter(st == '09') %>% 
+  # mutate(st = pad_0(st, 2),
+  #        cnty = pad_0(cnty, 3),
+  #        tract = pad_0(tract, 6)) %>% 
+  glimpse()
+
+severehousing_tract
+```
+
+## tract crosswalk: 2020 tracts - 2022 counties
+
+```{r}
+ct_linked_tracts20_counties22 <- read_sas("../inputs/ct_tract_crosswalk.sas7bdat") %>% 
+  select(tract_fips_2020 = tract_fipscode_2020, county_fipscode_2022) %>% 
+  mutate(statecode = "09", 
+         countycode_2022 = str_sub(county_fipscode_2022, 3L, 5L)) %>% 
+  select(statecode, countycode_2022, tract_fips_2020) %>% 
+  arrange(statecode, countycode_2022)
+
+ct_linked_tracts20_counties22
+```
+
+## link tracts to new county FIPS codes
+
+```{r}
+severehousing_tract_linked <- severehousing_tract %>% 
+  rename(statecode = st, countycode_2020 = cnty) %>% 
+  mutate(tract_fips_2020 = paste0(statecode, countycode_2020, tract), .after = 3) %>% 
+  select(-tract) %>% 
+  left_join(ct_linked_tracts20_counties22, 
+            by = c("statecode", "tract_fips_2020"))
+
+severehousing_tract_linked
+```
+
+## calculate v136 for CT new counties
+
+```{r}
+v136_CT_new_2 <- severehousing_tract_linked %>% 
+  select(statecode, countycode = countycode_2022, starts_with("t2")) %>% 
+  group_by(statecode, countycode) %>% 
+  summarise(across(contains("est"), ~sum(., na.rm = TRUE)),
+            across(contains("moe"), ~sqrt(sum(.^2, na.rm = TRUE))),
+            .groups = "drop"
+            ) %>% 
+  filter(!is.na(countycode)) %>% 
+  cal_v136() %>% 
+  glimpse()
+
+v136_CT_new_2
+```
+
+# v136 with new CT county data
+
+```{r}
+v136_2 <- bind_rows(
+  v136 %>% 
+    filter( !(statecode == "09" & countycode!= "000")),
+  v136_CT_new_2
+) %>% 
+  arrange(statecode, countycode)
+
+v136_2
+```
+
+# standard FIPS
+
+```{r}
+v136_3 <- fips %>% 
+  select(statecode, countycode) %>% 
+  left_join(v136_2, by = c("statecode", "countycode"))
+
+v136_3
+```
+
+# add flag_CT
+
+```{r}
+add_flag_CT <- function(df, vnum, old="U", new = "A"){
+  CT_old_lst <- c("001", "003", "005", "007", "009", "011", "013", "015")
+  CT_new_lst <- c("110", "120", "130", "140", "150", "160", "170", "180", "190")
+
+  res <- df %>% 
+    mutate(flag_CT = case_when(
+      statecode == "09" & countycode %in% CT_old_lst ~ old,
+      statecode == "09" & countycode %in% CT_new_lst ~ new,
+      TRUE ~ NA
+    )) %>% 
+    rename(!!(paste0(vnum, "_flag_CT")) := flag_CT)
+  
+  return(res)
+
+}
+
+v136_4 <- v136_3 %>% 
+  add_flag_CT(vnum = "v136", old="U", new = "A")
+
+v136_4
+```
+
+# save data
+
+```{r}
+write_csv(v136_4,
+          paste0("../measure_datasets/", "v136", "_r2025",
+                 ".csv"),
+          na = "")
+```
+
