@@ -1,0 +1,120 @@
+---
+title: "v156 traffic volume"
+author: "how"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+- Description
+Average traffic volume per meter of major roadways in the county.
+
+- What is the numerator?
+The numerator is the average count of vehicles per meter per day within 500 meters of a census block centroid (the center point of a census block).
+
+- What is the denominator?
+The denominator includes all interstate, principal arterial, other National Highway System, and HPMS sample section roads.
+
+NOTE: this measure has not been updated since Rankings 2024.
+
+## Raw data access
+
+- Formerly available here: https://gaftp.epa.gov/EJScreen/2023/2.22_September_UseMe but has been removed 
+(TODO: FIND IN THE ARCHIVE SOMEWHERE) 
+We've preserved this data in the raw_data/EJScreen folder but it is not currently available from the EPA. 
+
+Use the ID variable to identify counties.
+
+Data is at the census block group level, so a substring is used to extract the first five numbers which ID correspond to the state and county fipscode. 
+
+Weight the traffic (ptraf) variable to the county level using the population variable (acstotpop). 
+
+Repeat the process at the state level. 
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+library(here)
+```
+
+
+# standard county and state fips
+
+- The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+```{r }
+fips <-  bind_rows(
+  read_sas("../inputs/county_fips_with_ct_old.sas7bdat"),
+  read_sas( "../inputs/state_fips.sas7bdat")) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+# bring in the raw data 
+
+```{r}
+ej <- read_csv(here("raw_data/EJScreen/EJSCREEN_2023_BG_StatePct_with_AS_CNMI_GU_VI.csv"))
+
+# get the fipscodes 
+ej$fips = substr(ej$ID, 1, 5)
+ej$countycode = substr(ej$fips, 3,5)
+ej$statecode = substr(ej$fips, 1,2)
+```
+
+# some calculations 
+```{r}
+ej_county = ej %>% group_by(statecode, countycode) %>% 
+  summarize(countypop = sum(ACSTOTPOP, na.rm = TRUE),
+         rawvalue = sum((ACSTOTPOP / countypop) * PTRAF, na.rm = TRUE))
+
+ej_state = ej %>% group_by(statecode) %>% 
+  summarize(statepop = sum(ACSTOTPOP, na.rm = TRUE), 
+            rawvalue = sum((ACSTOTPOP/statepop) * PTRAF, na.rm = TRUE)) %>% 
+  mutate(countycode = "000") %>% 
+  filter(as.numeric(statecode) < 60) #get rid of island regions before calcing ntl value 
+
+ej_nat = ej_state %>% 
+  summarize(rawvalue = median(rawvalue, na.rm = TRUE)) %>% 
+  mutate(statecode = "00",
+         countycode = "000")
+  
+ejall = rbind(ej_county, ej_state, ej_nat)
+```
+
+#combine with complete fips and rename some things 
+```{r}
+v156 = merge(fips, ejall, by = c("statecode", "countycode"), all.x = TRUE)
+
+v156 = v156 %>% select(-countypop, -statepop) %>% 
+  rename(v156_rawvalue = rawvalue) %>% 
+  mutate(v156_rawvalue = ifelse(v156_rawvalue == 0, NA, v156_rawvalue))
+```
+
+# compare 
+note that GL uses the old fipscodes since this measure hasn't technically been updated since rankings 2024 
+```{r}
+# compare 
+gl = haven::read_sas("P:/CH-Ranking/Data/2024/6 Measure Datasets/Additional Measures/v156.sas7bdat")
+
+comp = merge(gl, v156, by = c("statecode", "countycode"))
+
+comp$diff= comp$v156_rawvalue.x - comp$v156_rawvalue.y
+
+comp %>% filter(is.na(v156_rawvalue.x) & !is.na(v156_rawvalue.y))
+comp %>% filter(v156_rawvalue.y == 0 & v156_rawvalue.x !=0)
+```
+# save the measure_dataset
+```{r}
+write.csv(v156, file = here("measure_datasets/v156.csv"))
+```
+
