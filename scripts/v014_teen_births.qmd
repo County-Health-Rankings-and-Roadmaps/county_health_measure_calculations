@@ -1,0 +1,321 @@
+---
+title: "v014 teen births"
+author: "how"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# about
+
+## Basic information
+
+-   Description: Number of births per 1,000 female population ages 15-19.
+
+-   What is the numerator? The numerator is the total number of births to mothers ages 15-19 in the seven-year time period.
+
+-   What is the denominator? The denominator is the aggregate female population, ages 15-19, over the seven-year time period.
+
+## Raw data access
+
+Population data come from Census population estimates (https://www2.census.gov/programs-surveys/popest/datasets) from 2017 to 2023. July 1 population estimates are used for each year (e.g., for 2022, set YEAR = 4 to get 7/1/2022 population estimate). Data files can be downloaded using the links below.
+
+2023 Census Population Estimates file layout: https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2020-2023/cc-est2023-alldata.pdf Data: https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/asrh/cc-est2023-alldata.csv
+
+2022 Census Population Estimates file layout: https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2020-2022/cc-est2022-alldata.pdf Data: https://www2.census.gov/programs-surveys/popest/datasets/2020-2022/counties/asrh/cc-est2022-all.csv
+
+2021 Census Population Estimates file layout: https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2020-2021/cc-est2021-alldata.pdf Data: https://www2.census.gov/programs-surveys/popest/datasets/2020-2021/counties/asrh/cc-est2021-all.csv
+
+2020 Census Population Estimates file layout: https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2010-2020/cc-est2020-alldata.pdf Data: https://www2.census.gov/programs-surveys/popest/datasets/2010-2020/counties/asrh/CC-EST2020-ALLDATA.csv
+
+2019 Census Population Estimates file layout: https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2010-2019/cc-est2019-alldata.pdf Data: https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/asrh/cc-est2019-alldata.csv
+
+2018 Census Population Estimates file layout: https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2010-2018/cc-est2018-alldata.pdf Data: https://www2.census.gov/programs-surveys/popest/datasets/2010-2018/counties/asrh/cc-est2018-alldata.csv
+
+2017 Census Population Estimates file layout: https://www2.census.gov/programs-surveys/popest/technical-documentation/file-layouts/2010-2017/cc-est2017-alldata.pdf Data: https://www2.census.gov/programs-surveys/popest/datasets/2010-2017/counties/asrh/cc-est2017-alldata.csv
+
+2022 and 2023 Connecticut (CT) counties population: used 2021 CT county population for legacy county FIPS codes. 2021 CT population values were used to calculate both state and national values as well.
+
+Subgroups are based on single-race categories.
+
+We calculate v014 teen births using natality data requested from the National Center for Health Statistics. However, CDC WONDER can also be used to pull teen birth rates: https://wonder.cdc.gov/natality-current.html
+
+If using CDC WONDER, 1) select the most recent 7 years, 2) select Age of Mother 15-19 years, and 3) group results by county
+
+# import packages
+
+```{r}
+library(tidyverse)
+library(haven)
+library(here)
+```
+
+# set up directory
+
+```{r}
+# set up directory that holds data needed for calculations
+# NCHS mortality data, not allowed to share in GitHub
+nchs_mort_dir <- "D:/CHRR/mortality raw"
+
+# NCHS natality data, not allowed to share in GitHub
+nchs_nata_dir <- "D:/CHRR/natality raw/rawdata"
+
+# Census county population estimates data
+census_pop_dir <- "D:/CHRR/pop raw"
+```
+
+# standard county and state fips
+
+-   The final dataset will need to be aligned with standard FIPS codes and to include all counties and states.
+
+```{r }
+fips <-  bind_rows(
+  read_sas(here("inputs/county_fips_with_ct_old.sas7bdat")),
+  read_sas(here( "inputs/state_fips.sas7bdat"))) %>% 
+  arrange(statecode, countycode) %>% 
+  glimpse()
+
+```
+
+Load population data from census
+
+```{r}
+d23 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/asrh/cc-est2023-alldata.csv")
+
+d22 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2020-2022/counties/asrh/cc-est2022-all.csv")
+
+d21 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2020-2021/counties/asrh/cc-est2021-all.csv")
+
+d20 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2010-2020/counties/asrh/CC-EST2020-ALLDATA.csv")
+
+d19 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/counties/asrh/cc-est2019-alldata.csv")
+
+d18 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2010-2018/counties/asrh/cc-est2018-alldata.csv")
+
+d17 = read.csv("https://www2.census.gov/programs-surveys/popest/datasets/2010-2017/counties/asrh/cc-est2017-alldata.csv")
+
+
+```
+
+combine years and subset population data to include females between ages 15 and 19
+
+```{r}
+library(tidyverse)
+df = list(d17, d18, d19, d20, d21, d22, d23)
+dfsub = lapply(df, function(x) x %>% filter(AGEGRP == 4, YEAR == max(YEAR, na.rm = TRUE)) %>% 
+               select(TOT_FEMALE, STATE, COUNTY))
+
+# fix connecticut for 2022 and 2023: set ct pop values for 2022 and 2023 to be equal to ct vals in 2021 
+ct21 = dfsub[[5]] %>% filter(STATE == 9) #get vals from 2021 
+dfsub[[6]] = rbind(dfsub[[6]] %>% filter(STATE != 9), ct21) #replace for 2022 
+dfsub[[7]] = rbind(dfsub[[7]] %>% filter(STATE != 9), ct21) #replace for 2023 
+
+
+
+#get state level value for CT from 2022 
+# this is the current cause of differences w ganhua - he used the 2022 data to calc a state value for CT while i did not...
+ct22= d22 %>% filter(AGEGRP == 4, YEAR == max(YEAR, na.rm = TRUE), STATE ==9) %>% 
+               select(TOT_FEMALE, STATE, COUNTY) %>% summarize(TOT_FEMALE = sum(TOT_FEMALE))
+
+ct23= d23 %>% filter(AGEGRP == 4, YEAR == max(YEAR, na.rm = TRUE), STATE ==9) %>% 
+               select(TOT_FEMALE, STATE, COUNTY) %>% summarize(TOT_FEMALE = sum(TOT_FEMALE))
+
+
+#fix some old fipscodes 
+dfsub_fixed = lapply(dfsub, function(x) mutate(x, COUNTY = case_when(
+      STATE ==46 & COUNTY ==113 ~102,
+      STATE ==2 & COUNTY ==270 ~158,
+      STATE ==51 & COUNTY ==515 ~019,
+      TRUE ~ COUNTY
+      )))
+
+dftot = dfsub_fixed %>% reduce(full_join, by = c("STATE", "COUNTY")) 
+dftot = data.frame(dftot)
+
+# convert all years to numeric so they can be summed 
+dftot[c(1, 4:9)] <- sapply(dftot %>% select(-c("STATE", "COUNTY")),as.numeric)
+
+
+
+dftot$STATE = stringr::str_pad(dftot$STATE, width = 2, side = "left", pad = "0")
+dftot$COUNTY = stringr::str_pad(dftot$COUNTY, width = 3, side = "left", pad = "0")
+
+
+# get total pop of teen girls 
+dftot$popsums = rowSums(dftot %>% select(-c("STATE", "COUNTY")), na.rm = TRUE)
+
+dfn= dftot %>% select("STATE", "COUNTY", "popsums") 
+
+```
+
+Calculate state and national sums
+
+```{r}
+dst = dfn %>% group_by(STATE) %>% 
+  summarise(popsums = sum(popsums, na.rm = TRUE))
+dst$COUNTY = "000"
+
+dntl = dfn %>% 
+  summarise(popsums = sum(popsums, na.rm = TRUE))
+dntl$COUNTY = "000" 
+dntl$STATE = "00"
+
+
+pop_all = rbind(dst, dntl, dfn)
+
+#add fipscodes
+pop_all_f = merge(fips, pop_all, by.y = c("STATE", "COUNTY"), by.x = c("statecode", "countycode"), all.x = TRUE)
+
+```
+
+# Load the NCHS natality data
+
+```{r}
+
+
+nat17 = readr::read_fwf(paste0(nchs_nata_dir, "/NATL2017US.AllCnty.txt"), 
+                         col_positions = readr::fwf_cols(county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat18 = readr::read_fwf(paste0(nchs_nata_dir, "/NATL2018US.AllCnty.txt"), 
+                         col_positions = readr::fwf_cols(county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat19 = readr::read_fwf(paste0(nchs_nata_dir, "/nat2019us.AllCnty.txt"), 
+                         col_positions = readr::fwf_cols(county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat20 = readr::read_fwf(paste0(nchs_nata_dir, "/NATL2020us.AllCnty.txt"), 
+                         col_positions = readr::fwf_cols(county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat21 = readr::read_fwf(paste0(nchs_nata_dir, "/nat2021us.AllCnty.txt"), 
+                         col_positions = readr::fwf_cols(county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat22 = readr::read_fwf(paste0(nchs_nata_dir, "/NATL2022US.AllCnty.txt"), 
+                         col_positions = readr::fwf_cols(county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat23 = readr::read_fwf(paste0(nchs_nata_dir, "/nat2023us.AllCnty.txt"), 
+                         col_positions = readr::fwf_cols(county_fips = c(91, 93), state = c(89,90), mage = c(79)))
+
+nat = list( nat17, nat18, nat19, nat20, nat21, nat22, nat23)
+
+#remove births with mother's residence American Samoa, Guam, Northern Marianas, Puerto Rico, Virgin Islands, not applicable, and not classified ; remove non teen births 
+nat_fixed = lapply(nat, function(x) x %>% filter(mage == 2) %>% filter(!(state %in% c("AS", "GU", "MP", "PR", "VI", "XX", "ZZ", "AB", "BC", "MB", "NB", "ON", "QC", "SK", "ZZ")) & !(county_fips %in% c("000", "999"))) %>% mutate(birth = 1))
+
+
+#fix some old fipscodes 
+nat_fixed_again = lapply(nat_fixed, function(x) mutate(x, county_fips = case_when(
+      state =="SD" & county_fips =="113" ~"102",
+      state =="AK" & county_fips =="270" ~"158",
+      state =="VA" & county_fips =="515" ~"019",
+      TRUE ~ county_fips
+      )))
+
+natsums = lapply(nat_fixed_again, function(x) x %>% group_by(state, county_fips) %>% summarise(tbirth = sum(birth)))
+
+nattot = natsums %>% reduce(full_join, by = c("state", "county_fips")) 
+nattot = data.frame(nattot)
+nattot[3:9] <- sapply(nattot[3:9],as.numeric)
+
+nattot$birthsums = rowSums(nattot[3:9], na.rm = TRUE)
+
+
+
+```
+
+calculate state and national totals
+
+this needs to be done before merging w fips to ensure that we don't inadvertently lose any births
+
+```{r}
+
+statesums = nattot %>% filter(county_fips != "000") %>% 
+  group_by(state) %>% 
+  summarise(birthsums = sum(birthsums, na.rm = TRUE))
+statesums$county_fips = "000"
+
+ntlsum = nattot %>% filter(county_fips != "000") %>% 
+  summarise(birthsums = sum(birthsums, na.rm = TRUE))
+ntlsum$state = "US" 
+ntlsum$county_fips = "000"
+
+# suppress counties with fewer than 10 teen births 
+nattot$birthsums = ifelse(nattot$birthsums < 10, NA, nattot$birthsums)
+
+nattot_county = nattot %>% filter(county_fips != "000") %>% 
+  select(state, county_fips, birthsums)
+
+natall = bind_rows(nattot_county, statesums, ntlsum)
+
+
+
+```
+
+add and format fipscodes select important cols only
+
+```{r}
+
+nattot_fips <- merge(fips, natall, by.x = c("state", "countycode"), by.y = c("state", "county_fips"), all.x = TRUE) 
+```
+
+Now create the final dataset and calculate rates
+
+```{r}
+#combine birth and population data 
+births_pop = merge(nattot_fips, pop_all_f, by = c("statecode", "countycode"), all = TRUE)
+
+
+births_pop$rate = births_pop$birthsums/ births_pop$pop*1000
+
+#calculate poisson CIs
+#(some of this code came from GL)
+alo = (1-0.95)/2
+ahi = (0.95 + 1)/2
+
+dpoi = data.frame(n = 1:99)
+for (i in 1:length(dpoi$n)) { 
+dpoi$l = qgamma(alo, dpoi$n)/dpoi$n
+dpoi$u = qgamma(ahi, dpoi$n+1)/dpoi$n
+}
+
+
+births_pop_ci = births_pop %>% 
+  mutate(rse = 100*(sqrt(1/birthsums)), 
+         stde = rate*rse/100,
+         lci = ifelse(birthsums >= 100, rate - 1.96*stde, NA),
+         uci = ifelse(birthsums >= 100, rate + 1.96*stde, NA))
+
+
+births_pop_ci_p = merge(births_pop_ci, dpoi, by.x = "birthsums", by.y = "n", all.x = TRUE)
+
+births_pop_ci_p$lci = ifelse(is.na(births_pop_ci_p$lci), births_pop_ci_p$l * births_pop_ci_p$rate, births_pop_ci_p$lci)
+births_pop_ci_p$uci = ifelse(is.na(births_pop_ci_p$uci), births_pop_ci_p$u * births_pop_ci_p$rate, births_pop_ci_p$uci)
+
+how = births_pop_ci_p
+
+
+v014 = births_pop_ci_p %>% rename(v014_rawvalue = rate, 
+                                  v014_cilow = lci, 
+                                  v014_cihigh = uci,
+                                  v014_numerator = birthsums, 
+                                  v014_denominator = popsums) %>% 
+  select(statecode, 
+         countycode, 
+         v014_numerator, 
+         v014_denominator, 
+         v014_rawvalue,
+         v014_cihigh,
+         v014_cilow)
+
+
+
+```
+
+save the measure_dataset
+
+```{r}
+#save to project 
+write.csv(v014, file = here("measure_datasets/v014_R2025.csv"), row.names = FALSE)
+
+```
