@@ -17,7 +17,7 @@ Denominator: The denominator is the total occupied housing units in a county.
 
 ## Raw data access
 
-Data Source: American Community Survey, five-year estimates, table B25003 
+Data Source: American Community Survey, five-year estimates, table B25003
 
 Data Download Link: <https://data.census.gov/table/ACSDT5Y2023.B25003?q=B25003>
 
@@ -31,7 +31,6 @@ library(haven)
 library(tidycensus)
 library(here)
 ```
-
 
 # standard county and state fips
 
@@ -57,7 +56,7 @@ vars <- c(
 )
 
 # County-level data
-county_data <- get_acs(
+county_data <- tidycensus::get_acs(
   geography = "county",
   variables = vars,
   year = 2023,
@@ -98,7 +97,6 @@ totraw <- bind_rows(county_data, state_data1, us_data1)
 
 
 ```
-
 
 ```{r basic calculations}
 
@@ -144,7 +142,7 @@ all = all %>% select(statecode, countycode, v153_cihigh, v153_cilow, v153_numera
 ```
 
 
-THIS NEEDS STATE VALUES ADDED. some other clean up needed too !!!! 
+
 ```{r compare }
 compare("v153", all, 2025)
 initial <- read_sas(paste0("P:/CH-Ranking/Data/", 2025, "/3 Data calculated needs checking/", "v153", ".sas7bdat"))
@@ -155,4 +153,3 @@ initial <- read_sas(paste0("P:/CH-Ranking/Data/", 2025, "/3 Data calculated need
 ```{r save data}
 save_data(all, "v153")
 ```
-
