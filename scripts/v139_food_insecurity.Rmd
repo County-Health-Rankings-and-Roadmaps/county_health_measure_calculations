@@ -1,5 +1,5 @@
 ---
-title: "v139 Food Insecurity - R2025"
+title: "v139 Food Insecurity - R2026"
 author: "GL"
 output: html_document
 ---
@@ -52,23 +52,23 @@ fips <-  bind_rows(
 # import raw data
 
 ```{r}
-# requested data; saved on local drive, not on github 
-raw_dir <- "C:/01_CHRR/data/r2025/raw/mmg/MMG_Data_v3"
+# requested data; saved on local drive, not on github
+# raw_data/MMG is included in the .gitignore
 
 # county data
-fa_cnt <- openxlsx::read.xlsx(file.path(raw_dir, "MMG2024_2019-2022_Data_ToShare_v3.xlsx"),
+fa_cnt <- openxlsx::read.xlsx(xlsxFile = here("raw_data/MMG/MMG2025_2019-2023_Data_To_Share.xlsx"),
                         sheet = "County") %>% 
   janitor::clean_names() %>% 
-  filter(year == 2022) %>% 
+  filter(year == 2023) %>% 
   select(fips, rawvalue = overall_food_insecurity_rate,
          numerator = number_of_food_insecure_persons_overall) %>% 
   glimpse()
 
 # state data
-fa_st <- openxlsx::read.xlsx(file.path(raw_dir, "MMG2024_2019-2022_Data_ToShare_v3.xlsx"),
+fa_st <- openxlsx::read.xlsx(xlsxFile = here("raw_data/MMG/MMG2025_2019-2023_Data_To_Share.xlsx"),
                         sheet = "State") %>% 
   janitor::clean_names() %>% 
-  filter(year == 2022) %>% 
+  filter(year == 2023) %>% 
   select(fips, rawvalue = overall_food_insecurity_rate,
          numerator = number_of_food_insecure_persons_overall) %>% 
   glimpse()
@@ -191,7 +191,7 @@ v139_1
 
 ```{r}
 write_csv(v139_1, 
-          paste0("../measure_datasets/", "v139", "_r2025",
+          paste0("../measure_datasets/", "v139", "_r2026",
                  ".csv"),
           na = "")
 ```
