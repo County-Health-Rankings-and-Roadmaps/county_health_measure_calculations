@@ -80,17 +80,26 @@ fa_st <- openxlsx::read.xlsx(xlsxFile = here("raw_data/MMG/MMG2025_2019-2023_Dat
 ## combine county and state data
 
 ```{r}
-fa <- bind_rows(fa_cnt, fa_st) %>% 
-  arrange(fips) %>% 
-  mutate(statecode = case_when(fips<100 ~ str_pad(fips, 2, "left", "0"),
-                               fips>1000 ~ str_sub(str_pad(fips, 5, "left", "0"), 1L, 2L)),
-         countycode = case_when(fips<100 ~ "000",
-                               fips>1000 ~ str_sub(str_pad(fips, 5, "left", "0"), 3L, 5L))
-         ) %>% 
-  select(-fips) %>% 
-  select(statecode, countycode, everything())
 
-fa
+# Prepare fa_cnt
+fa_cnt_prepped <- fa_cnt %>%
+  mutate(
+    statecode = str_sub(fips, 1, 2),       # first 2 chars of fips
+    countycode = str_sub(fips, -3, -1)     # last 3 chars of fips
+  )
+
+# Prepare fa_st
+fa_st_prepped <- fa_st %>%
+  mutate(
+    statecode = fips,       # already 2-char state code
+    countycode = "000"      # all zeroes for state-level
+  )
+
+# Combine
+fa <- bind_rows(fa_st_prepped, fa_cnt_prepped)
+
+
+
 ```
 
 ## fix DC
@@ -120,15 +129,15 @@ fa_2
 
 US data comes from the bottom of this page: http://map.feedingamerica.org
 
-for 2022:
+for 2023:
 
-- numerator = 44,151,000
-- rawvalue = 0.135
+- numerator = 47,389,000
+- rawvalue = 0.143
 
 ```{r}
 fa_3 <- fa_2 %>% 
-  add_row(statecode = "00", countycode = "000", rawvalue = 0.135,
-          numerator = 44151000, .before = 1)
+  add_row(statecode = "00", countycode = "000", rawvalue = 0.143,
+          numerator = 47389000, .before = 1)
 
 fa_3
 ```
@@ -186,6 +195,20 @@ v139_1 <- v139 %>%
 
 v139_1
 ```
+# quick check
+```{r}
+mb = haven::read_sas("P:/CH-Ranking/Data/2026/4 To be verified by/v139.sas7bdat")
+
+summary(mb$v139_rawvalue)
+summary(mb$v139_numerator)
+
+summary(v139_1$v139_rawvalue)
+summary(v139_1$v139_numerator)
+
+
+```
+
+
 
 # save data
 
