@@ -3,6 +3,7 @@
 .RData
 .Ruserdata
 raw_data/nchs/
+raw_data/MMG*
 scripts/v147*
 scripts/v127*
 scripts/v129*
